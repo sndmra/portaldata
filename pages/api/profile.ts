@@ -127,6 +127,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return res.status(200).json({ success: true, result: userRes.data.result });
             }
 
+            case 'users': {
+                // Batch fetch multiple users - userId should be comma-separated
+                if (!userId || typeof userId !== 'string') {
+                    return res.status(400).json({ error: 'userId parameter required for users action' });
+                }
+
+                const userIds = userId.split(',').filter(Boolean);
+
+                if (userIds.length === 0) {
+                    return res.status(400).json({ error: 'No valid user IDs provided' });
+                }
+
+                // Fetch all users in parallel
+                const usersData = await Promise.all(
+                    userIds.map(async (id) => {
+                        try {
+                            const userRes = await axios.get(`${ckanUrl}/api/3/action/user_show`, {
+                                params: { id: id.trim() },
+                                headers: { Authorization: apiKey }
+                            });
+                            return { id: id.trim(), user: userRes.data.result };
+                        } catch (error) {
+                            console.error(`Error fetching user ${id}:`, error);
+                            return { id: id.trim(), user: null };
+                        }
+                    })
+                );
+
+                return res.status(200).json({ success: true, result: usersData });
+            }
+
             default:
                 return res.status(400).json({ error: `Unknown action: ${action}` });
         }

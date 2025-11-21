@@ -140,15 +140,24 @@ export default function DatasetDetail() {
             if (response.data.success) {
                 const activitiesData = response.data.result;
 
-                // Fetch usernames for each activity
-                const activitiesWithUsernames = await Promise.all(activitiesData.map(async (activity: Activity) => {
-                    try {
-                        const base = getCkanUrl();
-                        const userRes = await axios.get(`${base}/api/3/action/user_show?id=${activity.user_id}`, { headers });
-                        return { ...activity, username: userRes.data.result.name };
-                    } catch (e) {
-                        return { ...activity, username: 'Unknown User' };
-                    }
+                // Extract unique user IDs
+                const userIds = [...new Set(activitiesData.map((a: Activity) => a.user_id))];
+
+                // Batch fetch all users via proxy
+                const usersRes = await axios.get('/api/profile', {
+                    params: { action: 'users', userId: userIds.join(',') },
+                    headers
+                });
+
+                // Create a map of user IDs to usernames
+                const usersMap = new Map(
+                    usersRes.data.result.map((u: any) => [u.id, u.user?.name || 'Unknown User'])
+                );
+
+                // Map usernames to activities
+                const activitiesWithUsernames = activitiesData.map((activity: Activity) => ({
+                    ...activity,
+                    username: usersMap.get(activity.user_id) || 'Unknown User'
                 }));
 
                 setActivities(activitiesWithUsernames);

@@ -62,8 +62,7 @@ export default function Upload() {
         // Fetch organizations
         const fetchOrganizations = async () => {
             try {
-                const response = await axios.get(`${getCkanUrl()}/api/3/action/organization_list`, {
-                    params: { all_fields: true },
+                const response = await axios.get('/api/organizations', {
                     headers: { Authorization: apiKey }
                 });
                 setOrganizations(response.data.result);
