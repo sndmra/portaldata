@@ -5,7 +5,6 @@ import Layout from '@/components/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 
-import { getCkanUrl } from '@/lib/ckan';
 
 // const CKAN_API = 'http://localhost:5001/api/3';
 
@@ -116,34 +115,11 @@ export default function Profile() {
     const fetchActivities = async () => {
         setLoadingActivities(true);
         try {
-            const ckanBaseUrl = getCkanUrl();
-            const response = await axios.get(`${ckanBaseUrl}/api/3/action/dashboard_activity_list`, {
+            const response = await axios.get('/api/profile', {
+                params: { action: 'activities' },
                 headers: { Authorization: getApiKey() }
             });
-            const activitiesData = response.data.result.slice(0, 20);
-
-            // Fetch username for each activity
-            const activitiesWithUsernames = await Promise.all(
-                activitiesData.map(async (activity: Activity) => {
-                    try {
-                        const userResponse = await axios.get(`${ckanBaseUrl}/api/3/action/user_show?id=${activity.user_id}`, {
-                            headers: { Authorization: getApiKey() }
-                        });
-                        return {
-                            ...activity,
-                            username: userResponse.data.result.name || userResponse.data.result.display_name || activity.user_id
-                        };
-                    } catch (error) {
-                        console.error('Error fetching user:', error);
-                        return {
-                            ...activity,
-                            username: activity.user_id
-                        };
-                    }
-                })
-            );
-
-            setActivities(activitiesWithUsernames);
+            setActivities(response.data.result);
             setActivitiesFetched(true);
         } catch (error) {
             console.error('Error fetching activities:', error);
@@ -156,22 +132,15 @@ export default function Profile() {
         setLoadingDatasets(true);
         try {
             const userStr = localStorage.getItem('portal_user');
-            let userIdFilter = '';
             if (userStr) {
                 const user = JSON.parse(userStr);
-                userIdFilter = `creator_user_id:${user.id}`;
+                const response = await axios.get('/api/profile', {
+                    params: { action: 'datasets', userId: user.id },
+                    headers: { Authorization: getApiKey() }
+                });
+                setDatasets(response.data.result);
+                setDatasetsFetched(true);
             }
-
-            const response = await axios.get(`${getCkanUrl()}/api/3/action/package_search`, {
-                params: {
-                    rows: 100,
-                    include_private: true,
-                    fq: userIdFilter
-                },
-                headers: { Authorization: getApiKey() }
-            });
-            setDatasets(response.data.result.results);
-            setDatasetsFetched(true);
         } catch (error) {
             console.error('Error fetching datasets:', error);
         } finally {
@@ -182,32 +151,11 @@ export default function Profile() {
     const fetchOrganizations = async () => {
         setLoadingOrgs(true);
         try {
-            const response = await axios.get(`${getCkanUrl()}/api/3/action/organization_list_for_user`, {
-                params: { permission: 'read' },
+            const response = await axios.get('/api/profile', {
+                params: { action: 'organizations' },
                 headers: { Authorization: getApiKey() }
             });
-
-            const orgs = response.data.result;
-
-            // Fetch accurate counts for each org including private datasets
-            const orgsWithCounts = await Promise.all(orgs.map(async (org: Organization) => {
-                try {
-                    const countResponse = await axios.get(`${getCkanUrl()}/api/3/action/package_search`, {
-                        params: {
-                            q: `organization:${org.name}`,
-                            rows: 0,
-                            include_private: true
-                        },
-                        headers: { Authorization: getApiKey() }
-                    });
-                    return { ...org, package_count: countResponse.data.result.count };
-                } catch (e) {
-                    console.error(`Error fetching count for org ${org.name}`, e);
-                    return org;
-                }
-            }));
-
-            setOrganizations(orgsWithCounts);
+            setOrganizations(response.data.result);
             setOrgsFetched(true);
         } catch (error) {
             console.error('Error fetching organizations:', error);
@@ -219,7 +167,8 @@ export default function Profile() {
     const fetchGroups = async () => {
         setLoadingGroups(true);
         try {
-            const response = await axios.get(`${getCkanUrl()}/api/3/action/group_list_authz`, {
+            const response = await axios.get('/api/profile', {
+                params: { action: 'groups' },
                 headers: { Authorization: getApiKey() }
             });
             setGroups(response.data.result);
@@ -233,29 +182,12 @@ export default function Profile() {
 
     const fetchUserProfile = async () => {
         try {
-            // We can use user_show with the ID from local storage or just 'me' if supported, 
-            // but usually we need the ID. Let's try to get it from the auth context or fetch 'me' equivalent.
-            // Since we don't have the ID easily available in context without decoding, we can rely on 
-            // the fact that we are authenticated. 
-            // Actually, let's use the user_show with the authenticated user's ID if we had it, 
-            // or we can try to list users with our email? No, that's inefficient.
-            // Best bet: The /user_show endpoint often accepts 'id' parameter. 
-            // If we don't have the ID, we might need to store it on login.
-            // For now, let's assume we can get it or use a workaround.
-            // WAIT: The login response usually returns the user object. 
-            // Let's assume we can fetch the user details using the API key if we pass no ID? 
-            // CKAN `user_show` usually requires an ID or name.
-            // Let's try fetching the user list filtered by our email? No.
-            // Let's try to use the `user_show` with `id` as the username if we stored it?
-            // We didn't store the username.
-            // Let's check `useAuth`. It stores `user` object.
-
             const userStr = localStorage.getItem('portal_user');
             if (userStr) {
                 const user = JSON.parse(userStr);
                 // Fetch fresh data
-                const response = await axios.get(`${getCkanUrl()}/api/3/action/user_show`, {
-                    params: { id: user.id },
+                const response = await axios.get('/api/profile', {
+                    params: { action: 'user', userId: user.id },
                     headers: { Authorization: getApiKey() }
                 });
                 const userData = response.data.result;
@@ -268,7 +200,7 @@ export default function Profile() {
 
                 setUserProfile(profileData);
 
-                // Only set form state if not already editing (or just always sync on fresh fetch)
+                // Set form state
                 setFullname(profileData.fullname);
                 setEmail(profileData.email);
                 setAbout(profileData.about);
@@ -287,12 +219,7 @@ export default function Profile() {
         setUpdateMessage('');
 
         try {
-            const userStr = localStorage.getItem('portal_user');
-            if (!userStr) throw new Error('User not found');
-            const user = JSON.parse(userStr);
-
-            await axios.post(`${getCkanUrl()}/api/3/action/user_update`, {
-                id: user.id,
+            await axios.post('/api/profile/update', {
                 fullname: fullname,
                 email: email,
                 about: about
@@ -301,14 +228,7 @@ export default function Profile() {
             });
 
             setUpdateMessage('Profil berhasil diperbarui!');
-
-            // Update display profile
-            setUserProfile({ fullname, email, about, name: username });
-
-            // Update local storage and global state
-            const updatedUser = { ...user, fullname, email, name: username };
-            updateUser(updatedUser);
-
+            fetchUserProfile(); // Re-fetch profile to update local storage and display
         } catch (error: any) {
             console.error('Error updating profile:', error);
             setUpdateMessage('Gagal memperbarui profil: ' + (error.response?.data?.error?.message || error.message));
