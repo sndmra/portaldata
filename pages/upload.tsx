@@ -107,10 +107,43 @@ export default function Upload() {
         setFiles(files.filter((_, i) => i !== index));
     };
 
+    // Progress state
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadSpeed, setUploadSpeed] = useState('');
+    const [uploadETA, setUploadETA] = useState('');
+    const [uploadedSize, setUploadedSize] = useState('');
+    const [totalSize, setTotalSize] = useState('');
+    const [currentFileIndex, setCurrentFileIndex] = useState(0);
+    const [totalFiles, setTotalFiles] = useState(0);
+
+    // Helper to format bytes
+    const formatBytes = (bytes: number, decimals = 2) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    };
+
+    // Helper to format time
+    const formatTime = (seconds: number) => {
+        if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
+        if (seconds < 60) return `${Math.round(seconds)}s`;
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.round(seconds % 60);
+        return `${minutes}m ${remainingSeconds}s`;
+    };
+
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setMessage('');
+        setUploadProgress(0);
+        setUploadSpeed('');
+        setUploadETA('');
+        setUploadedSize('');
+        setTotalSize('');
 
         try {
             // Prepare tags array
@@ -159,8 +192,10 @@ export default function Upload() {
             }
 
             console.log('Starting resource upload loop. Files count:', filesToUpload.length);
+            setTotalFiles(filesToUpload.length);
 
             for (const [index, resource] of filesToUpload.entries()) {
+                setCurrentFileIndex(index + 1);
                 console.log(`Uploading file ${index + 1}/${filesToUpload.length}:`, resource.name);
 
                 const formData = new FormData();
@@ -170,6 +205,9 @@ export default function Upload() {
                 formData.append('description', resource.description);
                 formData.append('format', resource.file.name.split('.').pop()?.toUpperCase() || 'DATA');
 
+                const startTime = Date.now();
+                let lastLoaded = 0;
+
                 try {
                     // Use proxy API for resource creation
                     // IMPORTANT: Do NOT set Content-Type to multipart/form-data manually
@@ -178,6 +216,27 @@ export default function Upload() {
                         headers: {
                             Authorization: apiKey,
                         },
+                        onUploadProgress: (progressEvent) => {
+                            const { loaded, total } = progressEvent;
+                            if (total) {
+                                const percent = Math.round((loaded * 100) / total);
+                                setUploadProgress(percent);
+                                setUploadedSize(formatBytes(loaded));
+                                setTotalSize(formatBytes(total));
+
+                                // Calculate speed and ETA
+                                const currentTime = Date.now();
+                                const timeElapsed = (currentTime - startTime) / 1000; // seconds
+                                if (timeElapsed > 0) {
+                                    const speed = loaded / timeElapsed; // bytes per second
+                                    setUploadSpeed(`${formatBytes(speed)}/s`);
+
+                                    const remainingBytes = total - loaded;
+                                    const eta = remainingBytes / speed;
+                                    setUploadETA(formatTime(eta));
+                                }
+                            }
+                        }
                     });
                     console.log(`File ${index + 1} uploaded successfully`);
                 } catch (uploadError) {
@@ -194,6 +253,7 @@ export default function Upload() {
             setMessage(`Gagal: ${errorMsg}`);
         } finally {
             setLoading(false);
+            setUploadProgress(0);
         }
     };
 
@@ -604,6 +664,29 @@ export default function Upload() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Progress Bar */}
+                            {loading && uploadProgress > 0 && (
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-sm text-muted">
+                                        <span>Mengunggah file {currentFileIndex} dari {totalFiles}...</span>
+                                        <span>{uploadProgress}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div
+                                            className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-out"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        ></div>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-muted">
+                                        <span>{uploadedSize} / {totalSize}</span>
+                                        <div className="space-x-3">
+                                            <span>Speed: {uploadSpeed}</span>
+                                            <span>ETA: {uploadETA}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex justify-end space-x-3 pt-4 border-t">
                                 <button
