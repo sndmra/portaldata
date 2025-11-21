@@ -60,14 +60,13 @@ export default function EditDataset() {
 
             try {
                 // Fetch organizations
-                const orgsRes = await axios.get(`${getCkanUrl()}/api/3/action/organization_list`, {
-                    params: { all_fields: true },
+                const orgsRes = await axios.get('/api/organizations', {
                     headers: { Authorization: apiKey }
                 });
                 setOrganizations(orgsRes.data.result);
 
                 // Fetch dataset details
-                const datasetRes = await axios.get(`${getCkanUrl()}/api/3/action/package_show`, {
+                const datasetRes = await axios.get('/api/dataset', {
                     params: { id },
                     headers: { Authorization: apiKey }
                 });
@@ -133,7 +132,7 @@ export default function EditDataset() {
             if (maintainerEmail) packageData.maintainer_email = maintainerEmail;
 
             await axios.post(
-                `${getCkanUrl()}/api/3/action/package_update`,
+                '/api/dataset/update',
                 packageData,
                 {
                     headers: { Authorization: apiKey },

@@ -23,10 +23,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+        // Use user's API key if provided, otherwise fallback to sysadmin token (or handle as public)
+        const apiKey = req.headers.authorization || SYSADMIN_API_TOKEN;
+
         const response = await axiosInstance.get(`${getCkanUrl()}/api/3/action/package_show`, {
             params: { id },
             headers: {
-                'Authorization': SYSADMIN_API_TOKEN,
+                'Authorization': apiKey,
                 'Content-Type': 'application/json'
             }
         });
