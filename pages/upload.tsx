@@ -144,10 +144,14 @@ export default function Upload() {
                 }
             );
 
-            const packageId = packageRes.data.result.id;
+            console.log('Dataset created with ID:', packageId);
 
             // 2. Upload Resources
-            for (const resource of files) {
+            console.log('Starting resource upload loop. Files count:', files.length);
+
+            for (const [index, resource] of files.entries()) {
+                console.log(`Uploading file ${index + 1}/${files.length}:`, resource.name);
+
                 const formData = new FormData();
                 formData.append('package_id', packageId);
                 formData.append('upload', resource.file);
@@ -155,19 +159,26 @@ export default function Upload() {
                 formData.append('description', resource.description);
                 formData.append('format', resource.file.name.split('.').pop()?.toUpperCase() || 'DATA');
 
-                // Use proxy API for resource creation
-                await axios.post('/api/resource/create', formData, {
-                    headers: {
-                        Authorization: apiKey,
-                        'Content-Type': 'multipart/form-data',
-                    },
-                });
+                try {
+                    // Use proxy API for resource creation
+                    // IMPORTANT: Do NOT set Content-Type to multipart/form-data manually
+                    // Let the browser/axios set it with the correct boundary
+                    await axios.post('/api/resource/create', formData, {
+                        headers: {
+                            Authorization: apiKey,
+                        },
+                    });
+                    console.log(`File ${index + 1} uploaded successfully`);
+                } catch (uploadError) {
+                    console.error(`Error uploading file ${index + 1}:`, uploadError);
+                    throw uploadError; // Re-throw to catch in main block
+                }
             }
 
             setMessage('Dataset berhasil dibuat!');
             setTimeout(() => router.push(`/${packageId}`), 1500);
         } catch (error: any) {
-            console.error(error);
+            console.error('Upload process error:', error);
             const errorMsg = error.response?.data?.error?.message || 'Gagal membuat dataset. Periksa koneksi dan coba lagi.';
             setMessage(`Gagal: ${errorMsg}`);
         } finally {
