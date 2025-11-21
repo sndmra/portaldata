@@ -3,8 +3,9 @@ import axios from 'axios';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/hooks/useAuth';
+import { getCkanUrl } from '@/lib/ckan';
 
-const CKAN_API = 'http://localhost:5001/api/3';
+// const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Organization {
     id: string;
@@ -61,7 +62,7 @@ export default function Upload() {
         // Fetch organizations
         const fetchOrganizations = async () => {
             try {
-                const response = await axios.get(`${CKAN_API}/action/organization_list`, {
+                const response = await axios.get(`${getCkanUrl()}/api/3/action/organization_list`, {
                     params: { all_fields: true },
                     headers: { Authorization: apiKey }
                 });
@@ -136,7 +137,7 @@ export default function Upload() {
             if (maintainerEmail) packageData.maintainer_email = maintainerEmail;
 
             const packageRes = await axios.post(
-                `${CKAN_API}/action/package_create`,
+                `${getCkanUrl()}/api/3/action/package_create`,
                 packageData,
                 {
                     headers: { Authorization: apiKey },
@@ -154,7 +155,7 @@ export default function Upload() {
                 formData.append('description', resource.description);
                 formData.append('format', resource.file.name.split('.').pop()?.toUpperCase() || 'DATA');
 
-                await axios.post(`${CKAN_API}/action/resource_create`, formData, {
+                await axios.post(`${getCkanUrl()}/api/3/action/resource_create`, formData, {
                     headers: {
                         Authorization: apiKey,
                         'Content-Type': 'multipart/form-data',

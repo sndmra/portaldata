@@ -5,8 +5,6 @@ import Layout from '@/components/Layout';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 
-const CKAN_API = 'http://localhost:5001/api/3';
-
 // Helper function to get color for file format
 const getFormatColor = (format: string): string => {
     const formatLower = format?.toLowerCase() || '';
@@ -25,121 +23,131 @@ interface Dataset {
     notes?: string;
     num_resources?: number;
     metadata_modified?: string;
+    private?: boolean;
     organization?: {
         title: string;
         image_url?: string;
     };
     tags?: { name: string }[];
     resources?: { format: string }[];
-    private?: boolean;
-}
-
-interface FacetItem {
-    display_name: string;
-    name: string;
-    count: number;
 }
 
 interface Facet {
-    title: string;
-    items: FacetItem[];
+    name: string;
+    display_name: string;
+    count: number;
 }
 
 export default function Search() {
     const router = useRouter();
-    const { q } = router.query;
-    const [datasets, setDatasets] = useState<Dataset[]>([]);
-    const [facets, setFacets] = useState<{ [key: string]: Facet }>({});
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState(typeof q === 'string' ? q : '');
-    const [totalCount, setTotalCount] = useState(0);
-
-    const [page, setPage] = useState(1);
-    const ROWS_PER_PAGE = 8;
-    const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
-
-    // Filter State - Now Arrays for Multi-Select
-    const [selectedOrg, setSelectedOrg] = useState<string[]>([]);
-    const [selectedTag, setSelectedTag] = useState<string[]>([]);
-    const [selectedFormat, setSelectedFormat] = useState<string[]>([]);
-
+    const { q, org, tag, format } = router.query;
     const { getApiKey, isLoading: authLoading, apiKey } = useAuth();
 
+    const [datasets, setDatasets] = useState<Dataset[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [total, setTotal] = useState(0);
+    const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
+    const [page, setPage] = useState(1);
+    const ROWS_PER_PAGE = 10;
+
+    // Filters
+    const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Facets
+    const [orgFacets, setOrgFacets] = useState<Facet[]>([]);
+    const [tagFacets, setTagFacets] = useState<Facet[]>([]);
+    const [formatFacets, setFormatFacets] = useState<Facet[]>([]);
+
     useEffect(() => {
         if (router.isReady && !authLoading) {
-            const query = typeof q === 'string' ? q : '';
-            setSearchTerm(query);
-            // Initial fetch for both facets and datasets
-            fetchFacets(query);
-            fetchDatasets(query, 1);
+            if (q) setSearchQuery(q as string);
+            if (org) setSelectedOrgs(Array.isArray(org) ? org : [org as string]);
+            if (tag) setSelectedTags(Array.isArray(tag) ? tag : [tag as string]);
+            if (format) setSelectedFormats(Array.isArray(format) ? format : [format as string]);
         }
-    }, [router.isReady, q, apiKey, authLoading]);
+    }, [router.isReady, q, org, tag, format, authLoading]);
 
-    // Effect to re-fetch datasets when filters change (but NOT facets)
     useEffect(() => {
-        if (router.isReady && !authLoading) {
-            const query = typeof q === 'string' ? q : '';
-            fetchDatasets(query, 1);
+        if (!authLoading) {
+            fetchDatasets();
+            fetchFacets();
         }
-    }, [selectedOrg, selectedTag, selectedFormat]);
+    }, [searchQuery, selectedOrgs, selectedTags, selectedFormats, apiKey, authLoading]);
 
-    // Fetch facets based ONLY on the search term (ignoring filters)
-    const fetchFacets = async (query = '') => {
+    const fetchFacets = async () => {
         try {
-            const params: any = {
-                rows: 0, // We only need facets, not results
-                facet: true,
-                'facet.field': '["organization", "tags", "res_format"]',
-                q: query,
-                include_private: true
-            };
+            // We need to fetch facets separately or extract them from the main search
+            // For now, let's just fetch all organizations and groups as a baseline
+            // Ideally, CKAN package_search returns facets if requested
 
-            const headers: any = {};
-            const key = getApiKey();
-            if (key) headers.Authorization = key;
+            // Using package_search to get facets
+            // Use proxy API
+            const response = await axios.get('/api/search', {
+                params: {
+                    q: searchQuery || undefined,
+                    rows: 0, // We only want facets
+                    'facet.field': '["organization", "tags", "res_format"]',
+                    include_private: true
+                },
+                headers: apiKey ? { Authorization: apiKey } : {}
+            });
 
-            // Use proxy API for search to ensure private datasets are visible
-            const response = await axios.get('/api/search', { params, headers });
-            setFacets(response.data.result.search_facets);
+            if (response.data.success) {
+                const facets = response.data.result.search_facets;
+
+                if (facets.organization) {
+                    setOrgFacets(facets.organization.items);
+                }
+                if (facets.tags) {
+                    setTagFacets(facets.tags.items);
+                }
+                if (facets.res_format) {
+                    setFormatFacets(facets.res_format.items);
+                }
+            }
         } catch (error) {
             console.error('Error fetching facets:', error);
         }
     };
 
-    const fetchDatasets = async (query = '', pageNum = 1) => {
+    const fetchDatasets = async () => {
         setLoading(true);
         try {
-            const start = (pageNum - 1) * ROWS_PER_PAGE;
-
-            // Construct Filter Query (fq)
             const fqParts = [];
-            if (selectedOrg.length > 0) {
-                fqParts.push(`organization:(${selectedOrg.map(o => `"${o}"`).join(' OR ')})`);
+            if (selectedOrgs.length > 0) {
+                fqParts.push(`organization:(${selectedOrgs.map(o => `"${o}"`).join(' OR ')})`);
             }
-            if (selectedTag.length > 0) {
-                fqParts.push(`tags:(${selectedTag.map(t => `"${t}"`).join(' OR ')})`);
+            if (selectedTags.length > 0) {
+                fqParts.push(`tags:(${selectedTags.map(t => `"${t}"`).join(' OR ')})`);
             }
-            if (selectedFormat.length > 0) {
-                fqParts.push(`res_format:(${selectedFormat.map(f => `"${f}"`).join(' OR ')})`);
+            if (selectedFormats.length > 0) {
+                fqParts.push(`res_format:(${selectedFormats.map(f => `"${f}"`).join(' OR ')})`);
             }
 
             const params: any = {
-                rows: ROWS_PER_PAGE,
-                start: start,
-                include_private: true,
-                q: query,
-                fq: fqParts.join(' AND ')
+                q: searchQuery || undefined,
+                rows: 10,
+                sort: 'metadata_modified desc',
+                include_private: true
             };
 
-            const headers: any = {};
-            const key = getApiKey();
-            if (key) headers.Authorization = key;
+            if (fqParts.length > 0) {
+                params.fq = fqParts.join(' AND ');
+            }
 
-            // Use proxy API for search
+            const headers: any = {};
+            if (apiKey) headers.Authorization = apiKey;
+
+            // Use proxy API to ensure private datasets are visible to guests
             const response = await axios.get('/api/search', { params, headers });
-            setDatasets(response.data.result.results);
-            setTotalCount(response.data.result.count);
-            setPage(pageNum);
+
+            if (response.data.success) {
+                setDatasets(response.data.result.results);
+                setTotal(response.data.result.count);
+            }
         } catch (error) {
             console.error('Error fetching datasets:', error);
         } finally {
@@ -149,32 +157,32 @@ export default function Search() {
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        router.push(`/search?q=${searchTerm}`);
+        router.push(`/search?q=${searchQuery}`);
     };
 
     const handlePageChange = (newPage: number) => {
-        fetchDatasets(searchTerm, newPage);
+        setPage(newPage);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const toggleFilter = (type: 'organization' | 'tag' | 'format', value: string) => {
         if (type === 'organization') {
-            setSelectedOrg(prev =>
+            setSelectedOrgs(prev =>
                 prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]
             );
         } else if (type === 'tag') {
-            setSelectedTag(prev =>
+            setSelectedTags(prev =>
                 prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]
             );
         } else if (type === 'format') {
-            setSelectedFormat(prev =>
+            setSelectedFormats(prev =>
                 prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value]
             );
         }
         setPage(1); // Reset to first page on filter change
     };
 
-    const totalPages = Math.ceil(totalCount / ROWS_PER_PAGE);
+    const totalPages = Math.ceil(total / ROWS_PER_PAGE);
 
     return (
         <Layout title="Jelajah Data - Portal Data Nusantara">
@@ -184,7 +192,7 @@ export default function Search() {
                     Jelajahi <span className="text-primary">Dataset</span>
                 </h1>
                 <p className="text-muted">
-                    Temukan data yang Anda butuhkan dari {totalCount} dataset tersedia
+                    Temukan data yang Anda butuhkan dari {total} dataset tersedia
                 </p>
             </div>
 
@@ -196,8 +204,8 @@ export default function Search() {
                             type="text"
                             className="w-full border border-gray-300 rounded-lg px-4 py-3 pl-12 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent shadow-sm"
                             placeholder="Cari dataset berdasarkan kata kunci..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                         />
                         <svg
                             className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 transform -translate-y-1/2"
@@ -229,12 +237,12 @@ export default function Search() {
                                 </svg>
                                 <h2 className="text-lg font-bold">Filter</h2>
                             </div>
-                            {(selectedOrg.length > 0 || selectedTag.length > 0 || selectedFormat.length > 0) && (
+                            {(selectedOrgs.length > 0 || selectedTags.length > 0 || selectedFormats.length > 0) && (
                                 <button
                                     onClick={() => {
-                                        setSelectedOrg([]);
-                                        setSelectedTag([]);
-                                        setSelectedFormat([]);
+                                        setSelectedOrgs([]);
+                                        setSelectedTags([]);
+                                        setSelectedFormats([]);
                                     }}
                                     className="text-xs text-primary hover:text-secondary font-medium"
                                 >
@@ -255,19 +263,19 @@ export default function Search() {
                             </div>
                             <div className="p-4 max-h-64 overflow-y-auto">
                                 <ul className="space-y-2">
-                                    {facets.organization?.items?.slice(0, 10).map((item: any) => (
+                                    {orgFacets?.slice(0, 10).map((item: any) => (
                                         <li
                                             key={item.name}
                                             onClick={() => toggleFilter('organization', item.name)}
-                                            className={`flex justify-between items-center text-sm py-1.5 px-2 rounded transition-colors cursor-pointer ${selectedOrg.includes(item.name) ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-gray-50 text-text'
+                                            className={`flex justify-between items-center text-sm py-1.5 px-2 rounded transition-colors cursor-pointer ${selectedOrgs.includes(item.name) ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-gray-50 text-text'
                                                 }`}
                                         >
                                             <span className="truncate pr-2">{item.display_name}</span>
-                                            <span className={`py-0.5 px-2 rounded-full text-xs font-semibold ${selectedOrg.includes(item.name) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'
+                                            <span className={`py-0.5 px-2 rounded-full text-xs font-semibold ${selectedOrgs.includes(item.name) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'
                                                 }`}>{item.count}</span>
                                         </li>
                                     ))}
-                                    {!facets.organization?.items?.length && <li className="text-sm text-muted text-center py-2">Tidak ada data</li>}
+                                    {!orgFacets?.length && <li className="text-sm text-muted text-center py-2">Tidak ada data</li>}
                                 </ul>
                             </div>
                         </div>
@@ -284,20 +292,20 @@ export default function Search() {
                             </div>
                             <div className="p-4 max-h-64 overflow-y-auto">
                                 <div className="flex flex-wrap gap-2">
-                                    {facets.tags?.items?.slice(0, 15).map((item: any) => (
+                                    {tagFacets?.slice(0, 15).map((item: any) => (
                                         <button
                                             key={item.name}
                                             onClick={() => toggleFilter('tag', item.name)}
-                                            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${selectedTag.includes(item.name)
+                                            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${selectedTags.includes(item.name)
                                                 ? 'bg-primary text-white shadow-sm'
                                                 : 'bg-gray-100 text-gray-700 hover:bg-primary hover:text-white'
                                                 }`}
                                         >
                                             {item.display_name}
-                                            <span className={`ml-1.5 ${selectedTag.includes(item.name) ? 'opacity-100' : 'opacity-75'}`}>({item.count})</span>
+                                            <span className={`ml-1.5 ${selectedTags.includes(item.name) ? 'opacity-100' : 'opacity-75'}`}>({item.count})</span>
                                         </button>
                                     ))}
-                                    {!facets.tags?.items?.length && <p className="text-sm text-muted text-center w-full py-2">Tidak ada data</p>}
+                                    {!tagFacets?.length && <p className="text-sm text-muted text-center w-full py-2">Tidak ada data</p>}
                                 </div>
                             </div>
                         </div>
@@ -314,19 +322,19 @@ export default function Search() {
                             </div>
                             <div className="p-4">
                                 <ul className="space-y-2">
-                                    {facets.res_format?.items?.slice(0, 8).map((item: any) => (
+                                    {formatFacets?.slice(0, 10).map((item: any) => (
                                         <li
                                             key={item.name}
                                             onClick={() => toggleFilter('format', item.name)}
-                                            className={`flex justify-between items-center text-sm py-1.5 px-2 rounded transition-colors cursor-pointer ${selectedFormat.includes(item.name) ? 'bg-orange-50 text-orange-600 font-semibold' : 'hover:bg-gray-50 text-text'
+                                            className={`flex justify-between items-center text-sm py-1.5 px-2 rounded transition-colors cursor-pointer ${selectedFormats.includes(item.name) ? 'bg-orange-50 text-orange-600 font-semibold' : 'hover:bg-gray-50 text-text'
                                                 }`}
                                         >
                                             <span className="font-medium truncate pr-2">{item.display_name}</span>
-                                            <span className={`py-0.5 px-2 rounded-full text-xs font-semibold ${selectedFormat.includes(item.name) ? 'bg-orange-600 text-white' : 'bg-orange-500/10 text-orange-600'
+                                            <span className={`py-0.5 px-2 rounded-full text-xs font-semibold ${selectedFormats.includes(item.name) ? 'bg-orange-600 text-white' : 'bg-orange-500/10 text-orange-600'
                                                 }`}>{item.count}</span>
                                         </li>
                                     ))}
-                                    {!facets.res_format?.items?.length && <li className="text-sm text-muted text-center py-2">Tidak ada data</li>}
+                                    {!formatFacets?.length && <li className="text-sm text-muted text-center py-2">Tidak ada data</li>}
                                 </ul>
                             </div>
                         </div>
@@ -339,15 +347,15 @@ export default function Search() {
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <p className="text-sm text-muted mb-1">
-                                {searchTerm && `Hasil pencarian untuk "${searchTerm}"`}
-                                {(selectedOrg.length > 0 || selectedTag.length > 0 || selectedFormat.length > 0) && (
+                                {searchQuery && `Hasil pencarian untuk "${searchQuery}"`}
+                                {(selectedOrgs.length > 0 || selectedTags.length > 0 || selectedFormats.length > 0) && (
                                     <span className="ml-1">
                                         (Difilter)
                                     </span>
                                 )}
                             </p>
                             <h2 className="text-xl font-bold text-text">
-                                {totalCount} Dataset Ditemukan
+                                {total} Dataset Ditemukan
                             </h2>
                         </div>
                         <div className="flex items-center gap-4">
@@ -535,15 +543,15 @@ export default function Search() {
                             </svg>
                             <h3 className="text-lg font-medium text-text mb-2">Tidak ada dataset ditemukan</h3>
                             <p className="text-muted">
-                                {searchTerm
-                                    ? `Tidak ada hasil untuk pencarian "${searchTerm}". Coba kata kunci lain.`
+                                {searchQuery
+                                    ? `Tidak ada hasil untuk pencarian "${searchQuery}". Coba kata kunci lain.`
                                     : 'Belum ada dataset yang tersedia saat ini.'}
                             </p>
                         </div>
                     )}
 
                     {/* Pagination */}
-                    {totalCount > ROWS_PER_PAGE && (
+                    {total > ROWS_PER_PAGE && (
                         <div className="flex justify-center items-center mt-12 gap-2">
                             <button
                                 onClick={() => handlePageChange(page - 1)}

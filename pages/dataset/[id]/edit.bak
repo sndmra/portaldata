@@ -3,9 +3,8 @@ import axios from 'axios';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/hooks/useAuth';
-import { getCkanUrl } from '@/lib/ckan';
 
-// const CKAN_API = 'http://localhost:5001/api/3';
+const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Organization {
     id: string;
@@ -28,80 +27,128 @@ const LICENSES = [
 export default function EditDataset() {
     const router = useRouter();
     const { id } = router.query;
-    const { apiKey, isLoading, requireAuth } = useAuth();
-
-    // Dataset fields
-    const [title, setTitle] = useState('');
-    const [name, setName] = useState('');
-    const [description, setDescription] = useState('');
-    const [tags, setTags] = useState('');
-    const [license, setLicense] = useState('notspecified');
-    const [organization, setOrganization] = useState('');
-    const [isPrivate, setIsPrivate] = useState(false);
-    const [author, setAuthor] = useState('');
-    const [authorEmail, setAuthorEmail] = useState('');
-    const [maintainer, setMaintainer] = useState('');
-    const [maintainerEmail, setMaintainerEmail] = useState('');
-    const [resources, setResources] = useState<any[]>([]);
-
-    // UI state
+    const { getApiKey, user, isLoading: authLoading } = useAuth();
+    const [loading, setLoading] = useState(true);
     const [organizations, setOrganizations] = useState<Organization[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [fetching, setFetching] = useState(true);
+    const [groups, setGroups] = useState<Group[]>([]);
     const [message, setMessage] = useState('');
 
-    useEffect(() => {
-        requireAuth('/login');
-    }, [isLoading]);
+    const [formData, setFormData] = useState({
+        id: '',
+        title: '',
+        name: '',
+        notes: '',
+        owner_org: '',
+        private: false,
+        groups: [] as string[],
+        tags: '',
+        version: '',
+        author: '',
+        author_email: '',
+        maintainer: '',
+        maintainer_email: '',
+        license_id: 'cc-by',
+    });
+
+    // Resources state
+    const [resources, setResources] = useState<Resource[]>([]);
+    const [files, setFiles] = useState<File[]>([]); // New files to upload
 
     useEffect(() => {
-        const fetchData = async () => {
-            if (!id || !apiKey) return;
-
-            try {
-                // Fetch organizations
-                const orgsRes = await axios.get(`${getCkanUrl()}/api/3/action/organization_list`, {
-                    params: { all_fields: true },
-                    headers: { Authorization: apiKey }
-                });
-                setOrganizations(orgsRes.data.result);
-
-                // Fetch dataset details
-                const datasetRes = await axios.get(`${getCkanUrl()}/api/3/action/package_show`, {
-                    params: { id },
-                    headers: { Authorization: apiKey }
-                });
-
-                const dataset = datasetRes.data.result;
-
-                // Pre-fill form
-                setTitle(dataset.title);
-                setName(dataset.name);
-                setDescription(dataset.notes || '');
-                setTags(dataset.tags?.map((t: any) => t.name).join(', ') || '');
-                setLicense(dataset.license_id || 'notspecified');
-                setOrganization(dataset.owner_org || '');
-                setIsPrivate(dataset.private);
-                setAuthor(dataset.author || '');
-                setAuthorEmail(dataset.author_email || '');
-                setMaintainer(dataset.maintainer || '');
-                setMaintainerEmail(dataset.maintainer_email || '');
-                setResources(dataset.resources || []);
-
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                setMessage('Gagal memuat data dataset.');
-            } finally {
-                setFetching(false);
+        if (!authLoading) {
+            if (!user) {
+                router.push('/login');
+                return;
             }
-        };
+            if (id) {
+                fetchDataset();
+                fetchOrganizations();
+                fetchGroups();
+            }
+        }
+    }, [id, user, authLoading]);
 
-        fetchData();
-    }, [id, apiKey]);
+    const fetchDataset = async () => {
+        try {
+            const apiKey = getApiKey();
+            const base = getCkanUrl();
+            // Use proxy or direct if we have key. Let's use proxy for consistency but we need edit rights.
+            // Actually for editing we should probably use direct CKAN API with user's key if possible, 
+            // but we are in a browser.
+            // Let's use the proxy /api/dataset to get data, but we'll need to post to CKAN directly or via a proxy that forwards auth.
+            // Since we are client-side and have the key, we can call CKAN directly if CORS allows, or use a proxy.
+            // The request is to use getCkanUrl() which implies we might be calling directly if it returns a URL.
+            // If getCkanUrl returns a server URL, we can use it.
 
-    // Auto-generate name from title (only if name is empty, though usually it won't be in edit mode)
-    // In edit mode, we might want to allow changing the name (URL), but be careful as it breaks links.
-    // Let's allow it but not auto-update from title to avoid accidental URL changes.
+            const response = await axios.get(`${base}/api/3/action/package_show`, {
+                params: { id },
+                headers: { Authorization: apiKey }
+            });
+
+            if (response.data.success) {
+                const ds = response.data.result;
+                setFormData({
+                    id: ds.id,
+                    title: ds.title,
+                    name: ds.name,
+                    notes: ds.notes || '',
+                    owner_org: ds.owner_org,
+                    private: ds.private,
+                    groups: ds.groups?.map((g: any) => g.id) || [],
+                    tags: ds.tags?.map((t: any) => t.name).join(', ') || '',
+                    version: ds.version || '',
+                    author: ds.author || '',
+                    author_email: ds.author_email || '',
+                    maintainer: ds.maintainer || '',
+                    maintainer_email: ds.maintainer_email || '',
+                    license_id: ds.license_id || 'cc-by',
+                });
+                setResources(ds.resources || []);
+            }
+        } catch (error) {
+            console.error('Error fetching dataset:', error);
+            setMessage('Error loading dataset');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchOrganizations = async () => {
+        try {
+            const apiKey = getApiKey();
+            const base = getCkanUrl();
+            const response = await axios.get(`${base}/api/3/action/organization_list_for_user`, {
+                headers: { Authorization: apiKey }
+            });
+            if (response.data.success) {
+                setOrganizations(response.data.result);
+            }
+        } catch (error) {
+            console.error('Error fetching organizations:', error);
+        }
+    };
+
+    const fetchGroups = async () => {
+        try {
+            const base = getCkanUrl();
+            const response = await axios.get(`${base}/api/3/action/group_list?all_fields=true`);
+            if (response.data.success) {
+                setGroups(response.data.result);
+            }
+        } catch (error) {
+            console.error('Error fetching groups:', error);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setFiles(prev => prev.filter((_, i) => i !== index));
+    };
 
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -109,43 +156,44 @@ export default function EditDataset() {
         setMessage('');
 
         try {
-            // Prepare tags array
-            const tagsArray = tags
-                .split(',')
-                .map((tag) => ({ name: tag.trim() }))
-                .filter((tag) => tag.name);
+            const apiKey = getApiKey();
+            if (!apiKey) throw new Error('Not authenticated');
 
-            const packageData: any = {
-                id: id, // Important for update
-                name,
-                title,
-                notes: description,
-                private: isPrivate,
-                license_id: license,
-                tags: tagsArray,
-                resources: resources, // Preserve existing resources
+            // 1. Update Dataset
+            const datasetData = {
+                ...formData,
+                tags: formData.tags.split(',').map(t => ({ name: t.trim() })).filter(t => t.name),
+                groups: formData.groups.map(g => ({ id: g })),
+                resources: resources // Keep existing resources
             };
 
-            if (organization) packageData.owner_org = organization;
-            if (author) packageData.author = author;
-            if (authorEmail) packageData.author_email = authorEmail;
-            if (maintainer) packageData.maintainer = maintainer;
-            if (maintainerEmail) packageData.maintainer_email = maintainerEmail;
+            const base = getCkanUrl();
+            await axios.post(`${base}/api/3/action/package_update`, datasetData, {
+                headers: { Authorization: apiKey }
+            });
 
-            await axios.post(
-                `${getCkanUrl()}/api/3/action/package_update`,
-                packageData,
-                {
-                    headers: { Authorization: apiKey },
+            // 2. Upload New Resources
+            if (files.length > 0) {
+                for (const file of files) {
+                    const formDataResource = new FormData();
+                    formDataResource.append('package_id', formData.id);
+                    formDataResource.append('upload', file);
+                    formDataResource.append('name', file.name);
+                    formDataResource.append('format', file.name.split('.').pop()?.toUpperCase() || '');
+
+                    await axios.post(`${base}/api/3/action/resource_create`, formDataResource, {
+                        headers: {
+                            Authorization: apiKey,
+                            'Content-Type': 'multipart/form-data'
+                        }
+                    });
                 }
-            );
+            }
 
-            setMessage('Dataset berhasil diperbarui!');
-            setTimeout(() => router.push(`/${name}`), 1500); // Redirect to the new name (URL)
+            router.push(`/dataset/${formData.id}`);
         } catch (error: any) {
-            console.error(error);
-            const errorMsg = error.response?.data?.error?.message || 'Gagal memperbarui dataset. Periksa koneksi dan coba lagi.';
-            setMessage(`Gagal: ${errorMsg}`);
+            console.error('Error updating dataset:', error);
+            setMessage(error.response?.data?.error?.message || 'Failed to update dataset');
         } finally {
             setLoading(false);
         }

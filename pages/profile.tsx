@@ -5,7 +5,9 @@ import Layout from '@/components/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 
-const CKAN_API = 'http://localhost:5001/api/3';
+import { getCkanUrl } from '@/lib/ckan';
+
+// const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Activity {
     id: string;
@@ -114,7 +116,8 @@ export default function Profile() {
     const fetchActivities = async () => {
         setLoadingActivities(true);
         try {
-            const response = await axios.get(`${CKAN_API}/action/dashboard_activity_list`, {
+            const ckanBaseUrl = getCkanUrl();
+            const response = await axios.get(`${ckanBaseUrl}/api/3/action/dashboard_activity_list`, {
                 headers: { Authorization: getApiKey() }
             });
             const activitiesData = response.data.result.slice(0, 20);
@@ -123,7 +126,7 @@ export default function Profile() {
             const activitiesWithUsernames = await Promise.all(
                 activitiesData.map(async (activity: Activity) => {
                     try {
-                        const userResponse = await axios.get(`${CKAN_API}/action/user_show?id=${activity.user_id}`);
+                        const userResponse = await axios.get(`${ckanBaseUrl}/api/3/action/user_show?id=${activity.user_id}`);
                         return {
                             ...activity,
                             username: userResponse.data.result.name || userResponse.data.result.display_name || activity.user_id
@@ -157,7 +160,7 @@ export default function Profile() {
                 userIdFilter = `creator_user_id:${user.id}`;
             }
 
-            const response = await axios.get(`${CKAN_API}/action/package_search`, {
+            const response = await axios.get(`${getCkanUrl()}/api/3/action/package_search`, {
                 params: {
                     rows: 100,
                     include_private: true,
@@ -177,7 +180,7 @@ export default function Profile() {
     const fetchOrganizations = async () => {
         setLoadingOrgs(true);
         try {
-            const response = await axios.get(`${CKAN_API}/action/organization_list_for_user`, {
+            const response = await axios.get(`${getCkanUrl()}/api/3/action/organization_list_for_user`, {
                 params: { permission: 'read' },
                 headers: { Authorization: getApiKey() }
             });
@@ -187,7 +190,7 @@ export default function Profile() {
             // Fetch accurate counts for each org including private datasets
             const orgsWithCounts = await Promise.all(orgs.map(async (org: Organization) => {
                 try {
-                    const countResponse = await axios.get(`${CKAN_API}/action/package_search`, {
+                    const countResponse = await axios.get(`${getCkanUrl()}/api/3/action/package_search`, {
                         params: {
                             q: `organization:${org.name}`,
                             rows: 0,
@@ -214,7 +217,7 @@ export default function Profile() {
     const fetchGroups = async () => {
         setLoadingGroups(true);
         try {
-            const response = await axios.get(`${CKAN_API}/action/group_list_authz`, {
+            const response = await axios.get(`${getCkanUrl()}/api/3/action/group_list_authz`, {
                 headers: { Authorization: getApiKey() }
             });
             setGroups(response.data.result);
@@ -249,7 +252,7 @@ export default function Profile() {
             if (userStr) {
                 const user = JSON.parse(userStr);
                 // Fetch fresh data
-                const response = await axios.get(`${CKAN_API}/action/user_show`, {
+                const response = await axios.get(`${getCkanUrl()}/api/3/action/user_show`, {
                     params: { id: user.id },
                     headers: { Authorization: getApiKey() }
                 });
@@ -286,7 +289,7 @@ export default function Profile() {
             if (!userStr) throw new Error('User not found');
             const user = JSON.parse(userStr);
 
-            await axios.post(`${CKAN_API}/action/user_update`, {
+            await axios.post(`${getCkanUrl()}/api/3/action/user_update`, {
                 id: user.id,
                 fullname: fullname,
                 email: email,

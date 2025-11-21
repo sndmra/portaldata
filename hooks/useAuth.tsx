@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { getCkanUrl } from '@/lib/ckan'; // Added this import
 
 const API_KEY_STORAGE = 'ckan_api_key';
 const USER_STORAGE = 'portal_user';

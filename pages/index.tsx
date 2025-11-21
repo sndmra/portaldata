@@ -5,8 +5,10 @@ import Layout from '@/components/Layout';
 import DatasetCard from '@/components/DatasetCard';
 import { useAuth } from '@/hooks/useAuth';
 
+import { getCkanUrl } from '@/lib/ckan';
+
 // Use localhost:5001 for server-side/client-side consistency in this prototype
-const CKAN_API = 'http://localhost:5001/api/3';
+// const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Dataset {
   id: string;
@@ -113,8 +115,9 @@ export default function Home() {
 
       // Fetch Metrics
       // We can get total datasets from the same package_search call result, but let's be explicit
-      const orgsReq = axios.get(`${CKAN_API}/action/organization_list`);
-      const groupsReq = axios.get(`${CKAN_API}/action/group_list`);
+      const base = getCkanUrl();
+      const orgsReq = axios.get(`${base}/api/3/action/organization_list`);
+      const groupsReq = axios.get(`${base}/api/3/action/group_list`);
 
       const [datasetsRes, orgsRes, groupsRes] = await Promise.all([
         datasetsReq,

@@ -1,11 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import http from 'http';
+import { getCkanUrl } from '@/lib/ckan';
 
 // Sysadmin API Token generated via CLI
 // In production, this should be in process.env.SYSADMIN_API_TOKEN
 const SYSADMIN_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI3LXF0X1lablAybEtfVGJLcjQ5anpQQ3A5TzA5eFNlVFplUm80UE1YcnNBIiwiaWF0IjoxNzYzNTYxNDQxfQ.9wO7PmNFeLelaLng41gvIU9-M6Y5bao7Q5eBN4bGtNE';
-const CKAN_URL = 'http://localhost:5001'; // Accessing from host machine since Next.js runs on host
+// const CKAN_URL = 'http://localhost:5001'; // Accessing from host machine since Next.js runs on host
 
 // Create an axios instance with a new agent to avoid socket hang up issues
 const axiosInstance = axios.create({
@@ -45,6 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Let's try the POST request.
         console.log('Attempting login for user:', username);
+        const CKAN_URL = getCkanUrl();
         const loginResponse = await axiosInstance.post(`${CKAN_URL}/login_generic`, params, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -82,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (!apiKey) {
                     console.log('No legacy API key found, generating new token...');
                     try {
-                        const tokenResponse = await axiosInstance.post(`${CKAN_URL}/api/3/action/api_token_create`, {
+                        const tokenResponse = await axiosInstance.post(`${getCkanUrl()}/api/3/action/api_token_create`, {
                             user: username,
                             name: `frontend-login-${Date.now()}`
                         }, {

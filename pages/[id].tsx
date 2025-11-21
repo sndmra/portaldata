@@ -7,19 +7,25 @@ import FileViewer from '@/components/FileViewer';
 import Head from 'next/head';
 import { useAuth } from '@/hooks/useAuth';
 
-const CKAN_API = 'http://localhost:5001/api/3';
+import { getCkanUrl } from '@/lib/ckan';
+
+// const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Resource {
     id: string;
     name: string;
     format: string;
     url: string;
+    description?: string;
     created?: string;
     size?: number;
 }
 
-interface Tag {
+interface Organization {
     id: string;
+    title: string;
+    image_url?: string;
+    description?: string;
     name: string;
 }
 
@@ -28,19 +34,19 @@ interface Dataset {
     name: string;
     title: string;
     notes?: string;
-    metadata_modified: string;
-    organization?: {
-        title: string;
-        name: string;
-        image_url?: string;
-    };
+    num_resources?: number;
+    metadata_modified?: string;
+    metadata_created?: string;
+    license_title?: string;
     author?: string;
     author_email?: string;
     maintainer?: string;
-    license_title?: string;
-    resources: Resource[];
-    tags?: Tag[];
+    maintainer_email?: string;
     private?: boolean;
+    organization?: Organization;
+    tags?: { name: string }[];
+    resources: Resource[];
+    groups?: { title: string }[];
 }
 
 interface Activity {
@@ -48,55 +54,74 @@ interface Activity {
     timestamp: string;
     activity_type: string;
     user_id: string;
-    username?: string;
-    data?: any;
+    object_id: string;
+    data: {
+        package?: { title: string };
+        user?: { name: string };
+    };
+    username?: string; // Added username field
 }
 
 export default function DatasetDetail() {
     const router = useRouter();
     const { id } = router.query;
+    const { getApiKey, user, isLoading: authLoading, apiKey, isSysadmin } = useAuth();
     const [dataset, setDataset] = useState<Dataset | null>(null);
     const [loading, setLoading] = useState(true);
-    const [viewingResource, setViewingResource] = useState<Resource | null>(null);
+    const [activeTab, setActiveTab] = useState<'data' | 'metadata' | 'activity'>('data');
     const [activities, setActivities] = useState<Activity[]>([]);
     const [loadingActivities, setLoadingActivities] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const { getApiKey, isSysadmin, apiKey, isLoading: authLoading } = useAuth();
-
     const [userOrgs, setUserOrgs] = useState<string[]>([]);
+    const [viewingResource, setViewingResource] = useState<Resource | null>(null);
 
     useEffect(() => {
         if (id && !authLoading) {
-            // Redirect to login if not authenticated
-            if (!apiKey) {
-                router.push('/login');
-                return;
-            }
-
             fetchDataset();
             fetchActivities();
-            fetchUserOrgs();
+            if (user) {
+                fetchUserOrgs();
+            }
         }
-    }, [id, apiKey, authLoading]);
+    }, [id, authLoading, apiKey, user]);
 
     const fetchUserOrgs = async () => {
         try {
-            const response = await axios.get(`${CKAN_API}/action/organization_list_for_user`, {
-                headers: { Authorization: getApiKey() }
+            const key = getApiKey();
+            if (!key) return;
+
+            const base = getCkanUrl();
+            const response = await axios.get(`${base}/api/3/action/organization_list_for_user`, {
+                headers: { Authorization: key }
             });
-            setUserOrgs(response.data.result.map((o: any) => o.name));
+
+            if (response.data.success) {
+                const orgs = response.data.result.map((org: any) => org.name);
+                setUserOrgs(orgs);
+            }
         } catch (error) {
-            console.error('Error fetching user orgs:', error);
+            console.error('Error fetching user organizations:', error);
         }
     };
 
     const fetchDataset = async () => {
         try {
-            // Use proxy API to fetch dataset details (allows viewing private metadata)
-            const response = await axios.get(`/api/dataset?id=${id}`);
-            setDataset(response.data.result);
-        } catch (error) {
+            const headers: any = {};
+            const key = getApiKey();
+            if (key) headers.Authorization = key;
+
+            // Use proxy API to fetch dataset details (handles private datasets)
+            const response = await axios.get(`/api/dataset?id=${id}`, { headers });
+
+            if (response.data.success) {
+                setDataset(response.data.result);
+            }
+        } catch (error: any) {
             console.error('Error fetching dataset:', error);
+            // If 403/401 (unauthorized) or 404 (not found/private), redirect to login if not authenticated
+            if (!user && (error.response?.status === 403 || error.response?.status === 401 || error.response?.status === 404)) {
+                router.push(`/login?redirect=/dataset/${id}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -105,30 +130,29 @@ export default function DatasetDetail() {
     const fetchActivities = async () => {
         setLoadingActivities(true);
         try {
-            // Use proxy API to fetch activities (allows viewing private dataset activities)
-            const response = await axios.get(`/api/activity?id=${id}&limit=10`);
-            const activitiesData = response.data.result;
+            const headers: any = {};
+            const key = getApiKey();
+            if (key) headers.Authorization = key;
 
-            // Fetch username for each activity
-            const activitiesWithUsernames = await Promise.all(
-                activitiesData.map(async (activity: Activity) => {
+            // Use proxy API to fetch activities (handles private datasets)
+            const response = await axios.get(`/api/activity?id=${id}`, { headers });
+
+            if (response.data.success) {
+                const activitiesData = response.data.result;
+
+                // Fetch usernames for each activity
+                const activitiesWithUsernames = await Promise.all(activitiesData.map(async (activity: Activity) => {
                     try {
-                        const userResponse = await axios.get(`${CKAN_API}/action/user_show?id=${activity.user_id}`);
-                        return {
-                            ...activity,
-                            username: userResponse.data.result.name || userResponse.data.result.display_name || activity.user_id
-                        };
-                    } catch (error) {
-                        console.error('Error fetching user:', error);
-                        return {
-                            ...activity,
-                            username: activity.user_id
-                        };
+                        const base = getCkanUrl();
+                        const userRes = await axios.get(`${base}/api/3/action/user_show?id=${activity.user_id}`, { headers });
+                        return { ...activity, username: userRes.data.result.name };
+                    } catch (e) {
+                        return { ...activity, username: 'Unknown User' };
                     }
-                })
-            );
+                }));
 
-            setActivities(activitiesWithUsernames);
+                setActivities(activitiesWithUsernames);
+            }
         } catch (error) {
             console.error('Error fetching activities:', error);
         } finally {
@@ -158,7 +182,7 @@ export default function DatasetDetail() {
         setDeleting(true);
         try {
             await axios.post(
-                `${CKAN_API}/action/package_delete`,
+                `${getCkanUrl()}/api/3/action/package_delete`,
                 { id: dataset?.id },
                 { headers: { 'Content-Type': 'application/json', Authorization: getApiKey() } }
             );
@@ -220,7 +244,7 @@ export default function DatasetDetail() {
             <div className="text-sm text-muted mb-2">
                 <span className="text-primary font-semibold">{dataset.organization?.title || 'UMUM'}</span>
                 <span className="mx-2">•</span>
-                <span>Diperbarui {new Date(dataset.metadata_modified).toLocaleDateString('id-ID')}</span>
+                <span>Diperbarui {dataset.metadata_modified ? new Date(dataset.metadata_modified).toLocaleDateString('id-ID') : 'N/A'}</span>
             </div>
 
             {/* Title */}
@@ -415,7 +439,7 @@ export default function DatasetDetail() {
                         <h3 className="text-lg font-bold text-text mb-4">Tags</h3>
                         <div className="flex flex-wrap gap-2">
                             {dataset.tags?.map((tag) => (
-                                <span key={tag.id} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                <span key={tag.name} className="inline-block px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
                                     {tag.name}
                                 </span>
                             ))}

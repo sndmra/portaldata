@@ -6,16 +6,18 @@ import { useAuth } from '../hooks/useAuth';
 
 import Link from 'next/link';
 
-const CKAN_API = 'http://localhost:5001/api/3';
+import { getCkanUrl } from '@/lib/ckan';
+
+// const CKAN_API = 'http://localhost:5001/api/3';
 
 export default function Login() {
+    const router = useRouter();
+    const { login, isAuthenticated, isLoading } = useAuth(); // Keep isAuthenticated and isLoading
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const router = useRouter();
-    const { login, isAuthenticated, isLoading } = useAuth();
-    const { registered } = router.query;
+    const [error, setError] = useState('');
+    const { registered } = router.query; // Keep registered from original code
 
     useEffect(() => {
         // Redirect to upload if already authenticated
@@ -24,24 +26,39 @@ export default function Login() {
         }
     }, [isLoading, isAuthenticated, router]);
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => { // Renamed from handleSubmit to handleLogin to match original
         e.preventDefault();
         setLoading(true);
         setError('');
 
         try {
-            const response = await axios.post('/api/login', {
-                username,
-                password
+            // 1. Login to get API Key (using our proxy API)
+            const loginRes = await axios.post('/api/login', {
+                id: username, // Changed from 'username' to 'id' as per snippet
+                password: password
             });
 
-            if (response.data.success) {
-                login(response.data.apikey, response.data.user, response.data.user.sysadmin);
-                router.push('/'); // Redirect on successful login
+            if (loginRes.data.success) {
+                const apiKey = loginRes.data.result.apikey;
+                const user = loginRes.data.result;
+
+                // 2. Check if user is sysadmin (optional, but good for UI)
+                // We can check the sysadmin flag from the user object directly
+                const isSysadmin = user.sysadmin;
+
+                login(user, apiKey, isSysadmin); // Updated login call as per snippet
+
+                // Check for redirect query param
+                const { redirect } = router.query;
+                if (redirect && typeof redirect === 'string') {
+                    router.push(redirect);
+                } else {
+                    router.push('/');
+                }
             }
         } catch (err: any) {
-            console.error(err);
-            setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+            console.error('Login error:', err); // Updated error message as per snippet
+            setError(err.response?.data?.error?.message || 'Login failed. Please check your credentials.'); // Updated error message as per snippet
         } finally {
             setLoading(false);
         }
