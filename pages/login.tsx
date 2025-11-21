@@ -45,7 +45,7 @@ export default function Login() {
                 // 2. Check if user is sysadmin (optional, but good for UI)
                 const isSysadmin = user.sysadmin;
 
-                login(user, apiKey, isSysadmin);
+                login(apiKey, user, isSysadmin);
 
                 // Check for redirect query param
                 const { redirect } = router.query;
