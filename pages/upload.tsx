@@ -135,8 +135,9 @@ export default function Upload() {
             if (maintainer) packageData.maintainer = maintainer;
             if (maintainerEmail) packageData.maintainer_email = maintainerEmail;
 
+            // Use proxy API for dataset creation
             const packageRes = await axios.post(
-                `${getCkanUrl()}/api/3/action/package_create`,
+                '/api/dataset/create',
                 packageData,
                 {
                     headers: { Authorization: apiKey },
@@ -154,7 +155,8 @@ export default function Upload() {
                 formData.append('description', resource.description);
                 formData.append('format', resource.file.name.split('.').pop()?.toUpperCase() || 'DATA');
 
-                await axios.post(`${getCkanUrl()}/api/3/action/resource_create`, formData, {
+                // Use proxy API for resource creation
+                await axios.post('/api/resource/create', formData, {
                     headers: {
                         Authorization: apiKey,
                         'Content-Type': 'multipart/form-data',
