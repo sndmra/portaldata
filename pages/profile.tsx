@@ -126,7 +126,9 @@ export default function Profile() {
             const activitiesWithUsernames = await Promise.all(
                 activitiesData.map(async (activity: Activity) => {
                     try {
-                        const userResponse = await axios.get(`${ckanBaseUrl}/api/3/action/user_show?id=${activity.user_id}`);
+                        const userResponse = await axios.get(`${ckanBaseUrl}/api/3/action/user_show?id=${activity.user_id}`, {
+                            headers: { Authorization: getApiKey() }
+                        });
                         return {
                             ...activity,
                             username: userResponse.data.result.name || userResponse.data.result.display_name || activity.user_id
