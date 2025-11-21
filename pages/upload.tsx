@@ -144,6 +144,7 @@ export default function Upload() {
                 }
             );
 
+            const packageId = packageRes.data.result.id;
             console.log('Dataset created with ID:', packageId);
 
             // 2. Upload Resources
