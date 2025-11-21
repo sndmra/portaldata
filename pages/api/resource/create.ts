@@ -23,14 +23,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+        console.log('[Resource Create Proxy] Parsing form data...');
         const form = new IncomingForm();
 
         const [fields, files] = await new Promise<[any, any]>((resolve, reject) => {
             form.parse(req, (err, fields, files) => {
-                if (err) reject(err);
+                if (err) {
+                    console.error('[Resource Create Proxy] Form parse error:', err);
+                    reject(err);
+                }
                 resolve([fields, files]);
             });
         });
+
+        console.log('[Resource Create Proxy] Fields received:', Object.keys(fields));
+        console.log('[Resource Create Proxy] Files received:', Object.keys(files));
 
         const ckanUrl = getCkanUrl();
         const formData = new FormData();
@@ -47,10 +54,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const uploadFile = Array.isArray(files.upload) ? files.upload[0] : files.upload;
 
         if (uploadFile) {
+            console.log('[Resource Create Proxy] Processing file:', {
+                name: uploadFile.originalFilename,
+                path: uploadFile.filepath,
+                size: uploadFile.size,
+                type: uploadFile.mimetype
+            });
+
             formData.append('upload', fs.createReadStream(uploadFile.filepath), {
                 filename: uploadFile.originalFilename || 'file',
                 contentType: uploadFile.mimetype || 'application/octet-stream',
             });
+        } else {
+            console.warn('[Resource Create Proxy] No file found in request');
         }
 
         console.log('[Resource Create Proxy] Uploading resource to:', `${ckanUrl}/api/3/action/resource_create`);
@@ -68,10 +84,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
         );
 
+        console.log('[Resource Create Proxy] CKAN Response Status:', response.status);
+        console.log('[Resource Create Proxy] CKAN Response Data Success:', response.data?.success);
+
         return res.status(200).json(response.data);
 
     } catch (error: any) {
         console.error('[Resource Create Proxy] Error creating resource:', error.response?.data || error.message);
+        if (error.response) {
+            console.error('[Resource Create Proxy] CKAN Error Details:', JSON.stringify(error.response.data, null, 2));
+        }
         return res.status(error.response?.status || 500).json({
             error: 'Failed to create resource',
             details: error.response?.data?.error?.message || error.message
