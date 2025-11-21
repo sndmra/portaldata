@@ -148,10 +148,20 @@ export default function Upload() {
             console.log('Dataset created with ID:', packageId);
 
             // 2. Upload Resources
-            console.log('Starting resource upload loop. Files count:', files.length);
+            // Combine files list with currentFile if it exists
+            const filesToUpload = [...files];
+            if (currentFile) {
+                filesToUpload.push({
+                    file: currentFile,
+                    name: currentName || currentFile.name,
+                    description: currentDescription
+                });
+            }
 
-            for (const [index, resource] of files.entries()) {
-                console.log(`Uploading file ${index + 1}/${files.length}:`, resource.name);
+            console.log('Starting resource upload loop. Files count:', filesToUpload.length);
+
+            for (const [index, resource] of filesToUpload.entries()) {
+                console.log(`Uploading file ${index + 1}/${filesToUpload.length}:`, resource.name);
 
                 const formData = new FormData();
                 formData.append('package_id', packageId);
