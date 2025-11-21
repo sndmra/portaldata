@@ -106,30 +106,24 @@ export default function Home() {
       const key = getApiKey();
       if (key) headers.Authorization = key;
 
-      // Fetch Top 3 Datasets
-      // Use proxy API to ensure private datasets are visible to guests
+      // Fetch Top 3 Datasets and Statistics using proxy API
       const datasetsReq = axios.get('/api/search', {
         params: { rows: 3, sort: 'metadata_modified desc', include_private: true },
         headers
       });
 
-      // Fetch Metrics
-      // We can get total datasets from the same package_search call result, but let's be explicit
-      const base = getCkanUrl();
-      const orgsReq = axios.get(`${base}/api/3/action/organization_list`);
-      const groupsReq = axios.get(`${base}/api/3/action/group_list`);
+      const statsReq = axios.get('/api/stats', { headers });
 
-      const [datasetsRes, orgsRes, groupsRes] = await Promise.all([
+      const [datasetsRes, statsRes] = await Promise.all([
         datasetsReq,
-        orgsReq,
-        groupsReq
+        statsReq
       ]);
 
       setDatasets(datasetsRes.data.result.results);
       setMetrics({
-        datasets: datasetsRes.data.result.count,
-        organizations: orgsRes.data.result.length,
-        groups: groupsRes.data.result.length
+        datasets: statsRes.data.result.datasets,
+        organizations: statsRes.data.result.organizations,
+        groups: statsRes.data.result.groups
       });
 
     } catch (error) {

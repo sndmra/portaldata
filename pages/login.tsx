@@ -34,19 +34,18 @@ export default function Login() {
         try {
             // 1. Login to get API Key (using our proxy API)
             const loginRes = await axios.post('/api/login', {
-                id: username, // Changed from 'username' to 'id' as per snippet
+                username: username,
                 password: password
             });
 
             if (loginRes.data.success) {
-                const apiKey = loginRes.data.result.apikey;
-                const user = loginRes.data.result;
+                const apiKey = loginRes.data.apikey;
+                const user = loginRes.data.user;
 
                 // 2. Check if user is sysadmin (optional, but good for UI)
-                // We can check the sysadmin flag from the user object directly
                 const isSysadmin = user.sysadmin;
 
-                login(user, apiKey, isSysadmin); // Updated login call as per snippet
+                login(user, apiKey, isSysadmin);
 
                 // Check for redirect query param
                 const { redirect } = router.query;
