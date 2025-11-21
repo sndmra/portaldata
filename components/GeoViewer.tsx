@@ -80,11 +80,18 @@ export default function GeoViewer({ resourceUrl, fileName, format }: GeoViewerPr
             const ext = format.toLowerCase() || fileName.split('.').pop()?.toLowerCase();
 
             if (['geojson', 'json'].includes(ext || '')) {
-                const response = await axios.get(resourceUrl);
+                // Use proxy API to fetch GeoJSON
+                const response = await axios.get('/api/resource', {
+                    params: { url: resourceUrl }
+                });
                 setGeoData(response.data);
                 // Calculate bounds for GeoJSON would be done by Leaflet automatically when added
             } else if (['tif', 'tiff'].includes(ext || '')) {
-                const response = await axios.get(resourceUrl, { responseType: 'arraybuffer' });
+                // Use proxy API to fetch GeoTIFF
+                const response = await axios.get('/api/resource', {
+                    params: { url: resourceUrl },
+                    responseType: 'arraybuffer'
+                });
                 const arrayBuffer = response.data;
                 const raster = await parseGeoraster(arrayBuffer);
                 setGeoraster(raster);

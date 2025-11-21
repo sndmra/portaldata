@@ -90,8 +90,9 @@ export default function FileViewer({ resourceUrl, fileName, format, onClose, api
     };
 
     const loadPdfData = async () => {
-        // Fetch PDF as blob to handle auth headers
-        const response = await axios.get(resourceUrl, {
+        // Use proxy API to fetch PDF
+        const response = await axios.get('/api/resource', {
+            params: { url: resourceUrl },
             responseType: 'blob',
             headers: getHeaders()
         });
@@ -100,7 +101,9 @@ export default function FileViewer({ resourceUrl, fileName, format, onClose, api
     };
 
     const loadTableData = async () => {
-        const response = await axios.get(resourceUrl, {
+        // Use proxy API to fetch table data
+        const response = await axios.get('/api/resource', {
+            params: { url: resourceUrl },
             responseType: 'arraybuffer',
             headers: getHeaders()
         });
@@ -134,7 +137,9 @@ export default function FileViewer({ resourceUrl, fileName, format, onClose, api
     };
 
     const loadTextData = async () => {
-        const response = await axios.get(resourceUrl, {
+        // Use proxy API to fetch text data
+        const response = await axios.get('/api/resource', {
+            params: { url: resourceUrl },
             responseType: 'text',
             headers: getHeaders()
         });
@@ -153,7 +158,7 @@ export default function FileViewer({ resourceUrl, fileName, format, onClose, api
                     </div>
                     <div className="flex gap-2">
                         <a
-                            href={resourceUrl}
+                            href={`/api/resource?url=${encodeURIComponent(resourceUrl)}`}
                             download
                             className="px-4 py-2 text-sm font-medium text-primary hover:text-secondary border border-primary hover:border-secondary rounded-md transition-colors"
                         >
