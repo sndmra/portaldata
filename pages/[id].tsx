@@ -7,8 +7,6 @@ import FileViewer from '@/components/FileViewer';
 import Head from 'next/head';
 import { useAuth } from '@/hooks/useAuth';
 
-import { getCkanUrl } from '@/lib/ckan';
-
 // const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Resource {
@@ -90,8 +88,8 @@ export default function DatasetDetail() {
             const key = getApiKey();
             if (!key) return;
 
-            const base = getCkanUrl();
-            const response = await axios.get(`${base}/api/3/action/organization_list_for_user`, {
+            // Use proxy API instead of direct CKAN call
+            const response = await axios.get('/api/user-orgs', {
                 headers: { Authorization: key }
             });
 
@@ -190,8 +188,9 @@ export default function DatasetDetail() {
 
         setDeleting(true);
         try {
+            // Use proxy API instead of direct CKAN call
             await axios.post(
-                `${getCkanUrl()}/api/3/action/package_delete`,
+                '/api/dataset/delete',
                 { id: dataset?.id },
                 { headers: { 'Content-Type': 'application/json', Authorization: getApiKey() } }
             );

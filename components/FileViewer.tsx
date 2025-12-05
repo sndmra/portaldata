@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import Papa from 'papaparse';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
@@ -117,10 +117,19 @@ export default function FileViewer({ resourceUrl, fileName, format, onClose, api
                 rows: parsed.data
             });
         } else {
-            // Excel files
-            const workbook = XLSX.read(response.data, { type: 'array' });
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+            // Excel files - use ExcelJS
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(response.data);
+            const firstSheet = workbook.worksheets[0];
+
+            const jsonData: any[][] = [];
+            firstSheet.eachRow((row, rowNumber) => {
+                const rowValues: any[] = [];
+                row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                    rowValues[colNumber - 1] = cell.value;
+                });
+                jsonData.push(rowValues);
+            });
 
             if (jsonData.length > 0) {
                 const headers = jsonData[0] as any[];

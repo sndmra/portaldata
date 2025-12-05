@@ -3,8 +3,8 @@ import axios from 'axios';
 import http from 'http';
 import { getCkanUrl } from '@/lib/ckan';
 
-const SYSADMIN_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI3LXF0X1lablAybEtfVGJLcjQ5anpQQ3A5TzA5eFNlVFplUm80UE1YcnNBIiwiaWF0IjoxNzYzNTYxNDQxfQ.9wO7PmNFeLelaLng41gvIU9-M6Y5bao7Q5eBN4bGtNE';
-// const CKAN_URL = 'http://localhost:5001';
+// Sysadmin API Token from environment variable
+const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
 
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: false }),

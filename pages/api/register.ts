@@ -3,10 +3,8 @@ import axios from 'axios';
 import http from 'http';
 import { getCkanUrl } from '@/lib/ckan';
 
-// Sysadmin API Token generated via CLI
-// In production, this should be in process.env.SYSADMIN_API_TOKEN
-const SYSADMIN_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI3LXF0X1lablAybEtfVGJLcjQ5anpQQ3A5TzA5eFNlVFplUm80UE1YcnNBIiwiaWF0IjoxNzYzNTYxNDQxfQ.9wO7PmNFeLelaLng41gvIU9-M6Y5bao7Q5eBN4bGtNE';
-// const CKAN_URL = 'http://localhost:5001'; // Accessing from host machine since Next.js runs on host
+// Sysadmin API Token from environment variable
+const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
 
 // Create an axios instance with a new agent to avoid socket hang up issues
 const axiosInstance = axios.create({
