@@ -58,7 +58,7 @@ const Navbar = () => {
                             <>
                                 {isSysadmin && (
                                     <Link
-                                        href="/admin/users"
+                                        href="/admin"
                                         className="px-3 py-2 text-sm font-medium text-muted hover:text-primary transition-colors"
                                     >
                                         Admin Panel

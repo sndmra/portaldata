@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 interface Dataset {
     id: string;
+    name: string;
     title: string;
     notes?: string;
     num_resources?: number;
@@ -46,7 +47,7 @@ const DatasetCard = ({ dataset }: DatasetCardProps) => {
                                 </span>
                             )}
                         </div>
-                        <Link href={`/${dataset.id}`} className="block mt-1">
+                        <Link href={`/${dataset.name}`} className="block mt-1">
                             <h3 className="text-lg font-bold text-text hover:text-primary transition-colors line-clamp-2">
                                 {dataset.title}
                             </h3>
@@ -92,7 +93,7 @@ const DatasetCard = ({ dataset }: DatasetCardProps) => {
                         {formatDate(dataset.metadata_modified)}
                     </span>
                 </div>
-                <Link href={`/${dataset.id}`} className="text-sm font-medium text-primary hover:text-secondary">
+                <Link href={`/${dataset.name}`} className="text-sm font-medium text-primary hover:text-secondary">
                     Lihat Detail &rarr;
                 </Link>
             </div>

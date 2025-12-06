@@ -1,5 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
+import http from 'http';
+
+// Axios instance to prevent socket hang up
+const axiosInstance = axios.create({
+    httpAgent: new http.Agent({ keepAlive: false }),
+    timeout: 30000, // 30s for file downloads
+});
 
 export const config = {
     api: {
@@ -15,21 +22,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { url } = req.query;
     const apiKey = req.headers.authorization;
 
-    // Log for debugging
-
     if (!url || typeof url !== 'string') {
-        console.error('[Resource Proxy] Invalid URL:', url);
         return res.status(400).json({ error: 'Resource URL required' });
     }
 
-    // CRITICAL FIX: Replace localhost URLs with actual CKAN backend URL
-    // CKAN stores resource URLs with its own base URL (often localhost in dev)
-    // but needs the actual backend URL in production (e.g., ngrok URL)
+    // Replace localhost URLs with actual CKAN backend URL
     let resourceUrl = url;
     const ckanBackendUrl = process.env.NEXT_PUBLIC_CKAN_URL || process.env.CKAN_URL;
 
     if (ckanBackendUrl && (url.includes('localhost:5001') || url.includes('localhost:5002'))) {
-        // Replace localhost:5001 or localhost:5002 with actual CKAN URL
         resourceUrl = url.replace(/http:\/\/localhost:500[12]/, ckanBackendUrl);
     }
 
@@ -37,7 +38,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         new URL(resourceUrl);
     } catch (urlError) {
-        console.error('[Resource Proxy] Malformed URL:', resourceUrl, urlError);
         return res.status(400).json({
             error: 'Invalid URL format',
             receivedUrl: url,
@@ -46,12 +46,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-
         // Fetch resource from CKAN with auth headers
-        const response = await axios.get(resourceUrl, {
-            responseType: 'arraybuffer', // Get raw bytes
+        const response = await axiosInstance.get(resourceUrl, {
+            responseType: 'arraybuffer',
             headers: apiKey ? { Authorization: apiKey } : {},
-            maxContentLength: 10 * 1024 * 1024, // 10MB limit
+            maxContentLength: 10 * 1024 * 1024,
         });
 
 

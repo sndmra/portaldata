@@ -11,6 +11,7 @@ export function useAuth() {
     const [user, setUser] = useState<any | null>(null);
     const [isSysadmin, setIsSysadmin] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isValidated, setIsValidated] = useState(false);
     const router = useRouter();
 
     // Clear all stored credentials
@@ -24,57 +25,59 @@ export function useAuth() {
     };
 
     useEffect(() => {
-        const validateSession = async () => {
-            const storedKey = localStorage.getItem(API_KEY_STORAGE);
-            const storedUser = localStorage.getItem(USER_STORAGE);
-            const storedSysadmin = localStorage.getItem(SYSADMIN_STORAGE) === 'true';
+        // Immediately load cached credentials (synchronous)
+        const storedKey = localStorage.getItem(API_KEY_STORAGE);
+        const storedUser = localStorage.getItem(USER_STORAGE);
+        const storedSysadmin = localStorage.getItem(SYSADMIN_STORAGE) === 'true';
 
-            // If no stored credentials, just finish loading
-            if (!storedKey || !storedUser) {
-                setIsLoading(false);
-                return;
-            }
-
-            const userData = JSON.parse(storedUser);
-
-            // Validate the session by checking if user exists
+        if (storedKey && storedUser) {
             try {
-                const response = await axios.get('/api/profile', {
-                    params: { action: 'user', userId: userData.id },
-                    headers: { Authorization: storedKey }
-                });
-
-                if (response.data.success) {
-                    // Session is valid
-                    setApiKey(storedKey);
-                    setUser(userData);
-                    setIsSysadmin(storedSysadmin);
-                } else {
-                    // Session invalid - clear credentials
-                    clearCredentials();
-                    if (!window.location.pathname.startsWith('/login')) {
-                        router.push('/login?expired=true');
-                    }
-                }
-            } catch (error: any) {
-                // If we get 403 or 404, user doesn't exist anymore
-                if (error.response?.status === 403 || error.response?.status === 404 || error.response?.status === 500) {
-                    clearCredentials();
-                    if (!window.location.pathname.startsWith('/login')) {
-                        router.push('/login?expired=true');
-                    }
-                } else {
-                    // For network errors, still set the cached credentials but user might see errors
-                    setApiKey(storedKey);
-                    setUser(userData);
-                    setIsSysadmin(storedSysadmin);
-                }
-            } finally {
-                setIsLoading(false);
+                const userData = JSON.parse(storedUser);
+                setApiKey(storedKey);
+                setUser(userData);
+                setIsSysadmin(storedSysadmin);
+            } catch (e) {
+                // Invalid stored data
+                clearCredentials();
             }
-        };
+        }
 
-        validateSession();
+        // Mark loading as complete immediately - show UI with cached data
+        setIsLoading(false);
+
+        // Validate session in background (only if not already validated this session)
+        if (storedKey && storedUser && !isValidated) {
+            const validateInBackground = async () => {
+                try {
+                    const userData = JSON.parse(storedUser);
+                    const response = await axios.get('/api/profile', {
+                        params: { action: 'user', userId: userData.id },
+                        headers: { Authorization: storedKey }
+                    });
+
+                    if (!response.data.success) {
+                        // Session invalid - clear credentials
+                        clearCredentials();
+                        if (!window.location.pathname.startsWith('/login')) {
+                            router.push('/login?expired=true');
+                        }
+                    } else {
+                        setIsValidated(true);
+                    }
+                } catch (error: any) {
+                    // If we get 403 or 404, user doesn't exist anymore
+                    if (error.response?.status === 403 || error.response?.status === 404) {
+                        clearCredentials();
+                        if (!window.location.pathname.startsWith('/login')) {
+                            router.push('/login?expired=true');
+                        }
+                    }
+                    // For network/500 errors, keep cached credentials
+                }
+            };
+
+            validateInBackground();
+        }
     }, []);
 
     const login = (key: string, userData: any, isSysadminUser: boolean = false) => {

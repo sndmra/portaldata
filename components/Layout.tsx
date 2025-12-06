@@ -38,6 +38,7 @@ const Layout = ({ children, title = 'Portal Data Nusantara', noContainer = false
                 <title>{title}</title>
                 <meta name="description" content="Portal Data Nusantara Prototype" />
                 <link rel="icon" href="/favicon.ico" />
+                <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
             </Head>
             <Navbar />
             <main className={`flex-grow w-full ${noContainer ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}`}>

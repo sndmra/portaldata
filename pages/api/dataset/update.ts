@@ -1,6 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
+import http from 'http';
 import { getCkanUrl } from '@/lib/ckan';
+
+// Axios instance to prevent socket hang up
+const axiosInstance = axios.create({
+    httpAgent: new http.Agent({ keepAlive: false }),
+    timeout: 30000,
+});
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -16,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         const ckanUrl = getCkanUrl();
 
-        const response = await axios.post(
+        const response = await axiosInstance.post(
             `${ckanUrl}/api/3/action/package_update`,
             req.body,
             {

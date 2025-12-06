@@ -75,8 +75,7 @@ export default function DatasetDetail() {
 
     useEffect(() => {
         if (id && !authLoading) {
-            fetchDataset();
-            fetchActivities();
+            fetchDataset(); // This will also fetch activities after loading dataset
             if (user) {
                 fetchUserOrgs();
             }
@@ -112,7 +111,11 @@ export default function DatasetDetail() {
             const response = await axios.get(`/api/dataset?id=${id}`, { headers });
 
             if (response.data.success) {
-                setDataset(response.data.result);
+                const datasetData = response.data.result;
+                setDataset(datasetData);
+
+                // Fetch activities using the dataset's UUID (required for private datasets)
+                fetchActivities(datasetData.id);
             }
         } catch (error: any) {
             console.error('Error fetching dataset:', error);
@@ -125,40 +128,50 @@ export default function DatasetDetail() {
         }
     };
 
-    const fetchActivities = async () => {
+    const fetchActivities = async (datasetId: string) => {
         setLoadingActivities(true);
         try {
             const headers: any = {};
             const key = getApiKey();
             if (key) headers.Authorization = key;
 
-            // Use proxy API to fetch activities (handles private datasets)
-            const response = await axios.get(`/api/activity?id=${id}`, { headers });
+            // Use dataset UUID for activities (required for private datasets)
+            const response = await axios.get(`/api/activity?id=${datasetId}`, { headers });
 
             if (response.data.success) {
                 const activitiesData = response.data.result;
 
-                // Extract unique user IDs
-                const userIds = [...new Set(activitiesData.map((a: Activity) => a.user_id))];
+                // Extract unique user IDs (filter out undefined/null)
+                const userIds = [...new Set(activitiesData.map((a: Activity) => a.user_id).filter(Boolean))];
 
-                // Batch fetch all users via proxy
-                const usersRes = await axios.get('/api/profile', {
-                    params: { action: 'users', userId: userIds.join(',') },
-                    headers
-                });
+                // Only fetch users if we have any user IDs
+                if (userIds.length > 0) {
+                    // Batch fetch all users via proxy
+                    const usersRes = await axios.get('/api/profile', {
+                        params: { action: 'users', userId: userIds.join(',') },
+                        headers
+                    });
 
-                // Create a map of user IDs to usernames
-                const usersMap = new Map(
-                    usersRes.data.result.map((u: any) => [u.id, u.user?.name || 'Unknown User'])
-                );
+                    // Create a map of user IDs to usernames
+                    const usersMap = new Map(
+                        usersRes.data.result.map((u: any) => [u.id, u.user?.name || 'Unknown User'])
+                    );
 
-                // Map usernames to activities
-                const activitiesWithUsernames = activitiesData.map((activity: Activity) => ({
-                    ...activity,
-                    username: usersMap.get(activity.user_id) || 'Unknown User'
-                }));
+                    // Map usernames to activities
+                    const activitiesWithUsernames = activitiesData.map((activity: Activity) => ({
+                        ...activity,
+                        username: usersMap.get(activity.user_id) || 'Unknown User'
+                    }));
 
-                setActivities(activitiesWithUsernames);
+                    setActivities(activitiesWithUsernames);
+                } else {
+                    // No user IDs, just set activities without usernames
+                    const activitiesWithUsernames = activitiesData.map((activity: Activity) => ({
+                        ...activity,
+                        username: 'Unknown User'
+                    }));
+                    setActivities(activitiesWithUsernames);
+                }
             }
         } catch (error) {
             console.error('Error fetching activities:', error);
@@ -168,13 +181,17 @@ export default function DatasetDetail() {
     };
 
     const getRelativeTime = (timestamp: string) => {
-        const date = new Date(timestamp);
+        // CKAN returns timestamps in UTC without 'Z' suffix
+        // Add 'Z' to ensure it's parsed as UTC
+        const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
+        const date = new Date(utcTimestamp);
         const now = new Date();
         const diffMs = now.getTime() - date.getTime();
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
 
+        if (diffMins < 1) return 'Baru saja';
         if (diffMins < 60) return `${diffMins} menit yang lalu`;
         if (diffHours < 24) return `${diffHours} jam yang lalu`;
         if (diffDays < 30) return `${diffDays} hari yang lalu`;

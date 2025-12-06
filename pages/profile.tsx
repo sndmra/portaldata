@@ -24,6 +24,7 @@ interface Activity {
 
 interface Dataset {
     id: string;
+    name: string;
     title: string;
     notes?: string;
     metadata_modified: string;
@@ -260,13 +261,17 @@ export default function Profile() {
     };
 
     const getRelativeTime = (timestamp: string) => {
-        const date = new Date(timestamp);
+        // CKAN returns timestamps in UTC without 'Z' suffix
+        // Add 'Z' to ensure it's parsed as UTC
+        const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
+        const date = new Date(utcTimestamp);
         const now = new Date();
         const diffMs = now.getTime() - date.getTime();
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
 
+        if (diffMins < 1) return 'Baru saja';
         if (diffMins < 60) return `${diffMins} menit yang lalu`;
         if (diffHours < 24) return `${diffHours} jam yang lalu`;
         if (diffDays < 30) return `${diffDays} hari yang lalu`;
@@ -457,7 +462,7 @@ export default function Profile() {
                                     ))
                                 ) : datasets.length > 0 ? (
                                     datasets.map((dataset) => (
-                                        <Link key={dataset.id} href={`/${dataset.id}`}>
+                                        <Link key={dataset.id} href={`/${dataset.name}`}>
                                             <div className="bg-white rounded-lg border border-border p-6 hover:shadow-md hover:border-primary transition-all cursor-pointer">
                                                 <h3 className="text-lg font-bold text-text hover:text-primary mb-2">{dataset.title}</h3>
                                                 <p className="text-sm text-muted mb-3 line-clamp-2">{dataset.notes || 'Tidak ada deskripsi'}</p>

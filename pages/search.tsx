@@ -19,6 +19,7 @@ const getFormatColor = (format: string): string => {
 
 interface Dataset {
     id: string;
+    name: string;
     title: string;
     notes?: string;
     num_resources?: number;
@@ -429,7 +430,7 @@ export default function Search() {
                                 'grid-cols-1 gap-3'
                             }`}>
                             {datasets.map((dataset) => (
-                                <Link key={dataset.id} href={`/${dataset.id}`}>
+                                <Link key={dataset.id} href={`/${dataset.name}`}>
                                     <div className={`group bg-white rounded-lg border border-border transition-all duration-300 hover:shadow-lg hover:border-primary cursor-pointer h-full flex ${viewMode === 'list' ? 'flex-col sm:flex-row p-4 gap-4' :
                                         viewMode === 'compact' ? 'flex-col p-4' :
                                             'flex-col p-6 hover:-translate-y-1'

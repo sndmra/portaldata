@@ -9,8 +9,41 @@ const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
 // Create an axios instance with a new agent to avoid socket hang up issues
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: false }),
-    timeout: 5000,
+    timeout: 10000,
 });
+
+// Helper function to cleanup old frontend-login tokens for a user
+async function cleanupOldFrontendTokens(username: string, ckanUrl: string): Promise<void> {
+    try {
+        // List all tokens for the user
+        const tokenListResponse = await axiosInstance.post(
+            `${ckanUrl}/api/3/action/api_token_list`,
+            { user: username },
+            { headers: { 'Authorization': SYSADMIN_API_TOKEN } }
+        );
+
+        if (tokenListResponse.data.success && tokenListResponse.data.result) {
+            const tokens = tokenListResponse.data.result;
+
+            // Filter for frontend-login tokens and revoke them
+            for (const token of tokens) {
+                if (token.name && token.name.startsWith('frontend-login-')) {
+                    try {
+                        await axiosInstance.post(
+                            `${ckanUrl}/api/3/action/api_token_revoke`,
+                            { jti: token.id },
+                            { headers: { 'Authorization': SYSADMIN_API_TOKEN } }
+                        );
+                    } catch (revokeError) {
+                        // Silently ignore revoke errors for individual tokens
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        // Silently ignore cleanup errors - not critical for login
+    }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -152,6 +185,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 // If user has no legacy API key, generate a new API Token
                 if (!apiKey) {
                     try {
+                        // Cleanup old frontend-login tokens before creating a new one
+                        await cleanupOldFrontendTokens(username, CKAN_URL);
+
+                        // Create new token
                         const tokenResponse = await axiosInstance.post(`${getCkanUrl()}/api/3/action/api_token_create`, {
                             user: username,
                             name: `frontend-login-${Date.now()}`

@@ -1,6 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
+import http from 'http';
 import { getCkanUrl } from '@/lib/ckan';
+
+// Sysadmin token for public data lookups (user profiles are public)
+const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
+
+// Axios instance to prevent socket hang up
+const axiosInstance = axios.create({
+    httpAgent: new http.Agent({ keepAlive: false }),
+    timeout: 10000,
+});
+
+// Actions that can use sysadmin token for unauthenticated users (public data)
+const PUBLIC_ACTIONS = ['user', 'users'];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'GET') {
@@ -8,14 +21,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { action, userId } = req.query;
-    const apiKey = req.headers.authorization;
-
-    if (!apiKey) {
-        return res.status(401).json({ error: 'API key required' });
-    }
+    const userApiKey = req.headers.authorization;
 
     if (!action || typeof action !== 'string') {
         return res.status(400).json({ error: 'Action parameter required' });
+    }
+
+    // For public actions, use sysadmin token if user is not authenticated
+    const isPublicAction = PUBLIC_ACTIONS.includes(action);
+    const apiKey = userApiKey || (isPublicAction ? SYSADMIN_API_TOKEN : null);
+
+    if (!apiKey) {
+        return res.status(401).json({ error: 'API key required for this action' });
     }
 
     const ckanUrl = getCkanUrl();
@@ -76,24 +93,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             case 'organizations': {
                 // Fetch user's organizations
-                const orgsRes = await axios.get(`${ckanUrl}/api/3/action/organization_list_for_user`, {
+                const orgsRes = await axiosInstance.get(`${ckanUrl}/api/3/action/organization_list_for_user`, {
                     params: { permission: 'read' },
                     headers: { Authorization: apiKey }
                 });
 
                 const orgs = orgsRes.data.result;
 
-                // Fetch accurate counts for each organization
+                // Fetch accurate counts for each organization using sysadmin token
+                // to include all datasets (including private ones)
                 const orgsWithCounts = await Promise.all(
                     orgs.map(async (org: any) => {
                         try {
-                            const countResponse = await axios.get(`${ckanUrl}/api/3/action/package_search`, {
+                            const countResponse = await axiosInstance.get(`${ckanUrl}/api/3/action/package_search`, {
                                 params: {
                                     q: `organization:${org.name}`,
                                     rows: 0,
                                     include_private: true
                                 },
-                                headers: { Authorization: apiKey }
+                                headers: { Authorization: SYSADMIN_API_TOKEN }
                             });
                             return { ...org, package_count: countResponse.data.result.count };
                         } catch (e) {

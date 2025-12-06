@@ -2,31 +2,30 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Layout from '../../components/Layout';
 import { useAuth } from '../../hooks/useAuth';
-import { useRouter } from 'next/router';
 import { AdminSidebar, MaterialIcon } from './index';
 
-interface User {
+interface Group {
     id: string;
     name: string;
-    fullname: string;
-    email: string;
+    title: string;
+    description: string;
     created: string;
-    sysadmin: boolean;
+    package_count: number;
 }
 
-export default function AdminUsers() {
+export default function AdminGroups() {
     const { isSysadmin, isLoading: authLoading, requireSysadmin, getApiKey } = useAuth();
-    const [users, setUsers] = useState<User[]>([]);
+    const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [newUser, setNewUser] = useState({ username: '', email: '', password: '', fullname: '' });
+    const [newGroup, setNewGroup] = useState({ name: '', title: '', description: '' });
     const [createLoading, setCreateLoading] = useState(false);
 
     useEffect(() => {
         requireSysadmin();
         if (isSysadmin) {
-            fetchUsers();
+            fetchGroups();
         }
     }, [isSysadmin, authLoading]);
 
@@ -35,29 +34,29 @@ export default function AdminUsers() {
         return apiKey ? { Authorization: apiKey } : {};
     };
 
-    const fetchUsers = async () => {
+    const fetchGroups = async () => {
         try {
-            const response = await axios.get('/api/admin/users', {
+            const response = await axios.get('/api/admin/groups', {
                 headers: getAuthHeaders()
             });
-            setUsers(response.data.users);
+            setGroups(response.data.groups);
         } catch (err) {
-            setError('Gagal memuat pengguna');
+            setError('Gagal memuat grup');
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Apakah Anda yakin ingin menghapus pengguna "${name}"?`)) return;
+        if (!confirm(`Apakah Anda yakin ingin menghapus grup "${name}"?`)) return;
 
         try {
-            await axios.delete(`/api/admin/users?id=${id}`, {
+            await axios.delete(`/api/admin/groups?id=${id}`, {
                 headers: getAuthHeaders()
             });
-            setUsers(users.filter(u => u.id !== id));
+            setGroups(groups.filter(g => g.id !== id));
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Gagal menghapus pengguna');
+            alert(err.response?.data?.message || 'Gagal menghapus grup');
         }
     };
 
@@ -65,14 +64,14 @@ export default function AdminUsers() {
         e.preventDefault();
         setCreateLoading(true);
         try {
-            const response = await axios.post('/api/admin/users', newUser, {
+            const response = await axios.post('/api/admin/groups', newGroup, {
                 headers: getAuthHeaders()
             });
-            setUsers([...users, response.data.user]);
+            setGroups([...groups, response.data.group]);
             setShowCreateModal(false);
-            setNewUser({ username: '', email: '', password: '', fullname: '' });
+            setNewGroup({ name: '', title: '', description: '' });
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Gagal membuat pengguna');
+            alert(err.response?.data?.message || 'Gagal membuat grup');
         } finally {
             setCreateLoading(false);
         }
@@ -81,23 +80,23 @@ export default function AdminUsers() {
     if (authLoading || !isSysadmin) return null;
 
     return (
-        <Layout title="Admin - Pengguna">
+        <Layout title="Admin - Grup">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="flex gap-8">
-                    <AdminSidebar activeItem="users" />
+                    <AdminSidebar activeItem="groups" />
 
                     <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-center mb-6">
                             <div>
-                                <h1 className="text-2xl font-bold text-text">Manajemen Pengguna</h1>
-                                <p className="text-muted mt-1">{users.length} pengguna terdaftar</p>
+                                <h1 className="text-2xl font-bold text-text">Manajemen Grup</h1>
+                                <p className="text-muted mt-1">{groups.length} grup terdaftar</p>
                             </div>
                             <button
                                 onClick={() => setShowCreateModal(true)}
                                 className="bg-primary text-white px-4 py-2.5 rounded-lg hover:bg-secondary transition flex items-center gap-2 shadow-sm"
                             >
-                                <MaterialIcon name="person_add" className="text-xl" />
-                                Tambah Pengguna
+                                <MaterialIcon name="add" className="text-xl" />
+                                Grup Baru
                             </button>
                         </div>
 
@@ -110,61 +109,53 @@ export default function AdminUsers() {
                                 <MaterialIcon name="error" />
                                 {error}
                             </div>
+                        ) : groups.length === 0 ? (
+                            <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-12 text-center">
+                                <MaterialIcon name="folder" className="text-6xl text-gray-300 mb-4" />
+                                <p className="text-muted">Belum ada grup. Buat grup pertama Anda!</p>
+                            </div>
                         ) : (
                             <div className="bg-white shadow-sm rounded-xl border border-border overflow-hidden">
                                 <table className="min-w-full divide-y divide-gray-100">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Pengguna</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Peran</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bergabung</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Grup</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dataset</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dibuat</th>
                                             <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {users.map((user) => (
-                                            <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                                        {groups.map((group) => (
+                                            <tr key={group.id} className="hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center">
-                                                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-sm">
-                                                            {(user.fullname || user.name).charAt(0).toUpperCase()}
+                                                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-sm">
+                                                            {group.title.charAt(0).toUpperCase()}
                                                         </div>
                                                         <div className="ml-4">
-                                                            <div className="text-sm font-semibold text-gray-900">{user.fullname || user.name}</div>
-                                                            <div className="text-xs text-gray-500">@{user.name}</div>
+                                                            <div className="text-sm font-semibold text-gray-900">{group.title}</div>
+                                                            <div className="text-xs text-gray-500">@{group.name}</div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-gray-500">
-                                                    {user.email}
-                                                </td>
                                                 <td className="px-6 py-4">
-                                                    {user.sysadmin ? (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-primary/10 text-primary">
-                                                            <MaterialIcon name="shield" className="text-sm" />
-                                                            Sysadmin
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                                                            <MaterialIcon name="person" className="text-sm" />
-                                                            User
-                                                        </span>
-                                                    )}
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                                        <MaterialIcon name="inventory_2" className="text-sm" />
+                                                        {group.package_count || 0}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-gray-500">
-                                                    {user.created ? new Date(user.created).toLocaleDateString('id-ID') : '-'}
+                                                    {group.created ? new Date(group.created).toLocaleDateString('id-ID') : '-'}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    {!user.sysadmin && (
-                                                        <button
-                                                            onClick={() => handleDelete(user.id, user.name)}
-                                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                                                            title="Hapus"
-                                                        >
-                                                            <MaterialIcon name="delete" className="text-xl" />
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => handleDelete(group.id, group.title)}
+                                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                                        title="Hapus"
+                                                    >
+                                                        <MaterialIcon name="delete" className="text-xl" />
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -179,53 +170,41 @@ export default function AdminUsers() {
                                 <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
                                     <div className="flex items-center gap-3 mb-6">
                                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                                            <MaterialIcon name="person_add" className="text-primary text-xl" />
+                                            <MaterialIcon name="create_new_folder" className="text-primary text-xl" />
                                         </div>
-                                        <h2 className="text-xl font-bold text-text">Buat Pengguna Baru</h2>
+                                        <h2 className="text-xl font-bold text-text">Buat Grup Baru</h2>
                                     </div>
                                     <form onSubmit={handleCreate} className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Nama (URL slug)</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                pattern="[a-z0-9-]+"
+                                                className="block w-full border border-gray-200 rounded-lg py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
+                                                value={newGroup.name}
+                                                onChange={e => setNewGroup({ ...newGroup, name: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                                                placeholder="grup-saya"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Judul</label>
                                             <input
                                                 type="text"
                                                 required
                                                 className="block w-full border border-gray-200 rounded-lg py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
-                                                value={newUser.username}
-                                                onChange={e => setNewUser({ ...newUser, username: e.target.value })}
-                                                placeholder="username"
+                                                value={newGroup.title}
+                                                onChange={e => setNewGroup({ ...newGroup, title: e.target.value })}
+                                                placeholder="Grup Saya"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
-                                            <input
-                                                type="text"
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                                            <textarea
                                                 className="block w-full border border-gray-200 rounded-lg py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
-                                                value={newUser.fullname}
-                                                onChange={e => setNewUser({ ...newUser, fullname: e.target.value })}
-                                                placeholder="Nama Lengkap"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                            <input
-                                                type="email"
-                                                required
-                                                className="block w-full border border-gray-200 rounded-lg py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
-                                                value={newUser.email}
-                                                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                                                placeholder="email@example.com"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                                            <input
-                                                type="password"
-                                                required
-                                                minLength={8}
-                                                className="block w-full border border-gray-200 rounded-lg py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
-                                                value={newUser.password}
-                                                onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                                                placeholder="Minimal 8 karakter"
+                                                rows={3}
+                                                value={newGroup.description}
+                                                onChange={e => setNewGroup({ ...newGroup, description: e.target.value })}
                                             />
                                         </div>
                                         <div className="flex justify-end gap-3 pt-4">

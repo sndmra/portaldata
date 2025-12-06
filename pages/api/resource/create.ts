@@ -1,9 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
+import http from 'http';
 import { IncomingForm, File as FormidableFile } from 'formidable';
 import fs from 'fs';
 import FormData from 'form-data';
 import { getCkanUrl } from '@/lib/ckan';
+
+// Axios instance to prevent socket hang up
+const axiosInstance = axios.create({
+    httpAgent: new http.Agent({ keepAlive: false }),
+    timeout: 60000, // 60s for file uploads
+});
 
 export const config = {
     api: {
@@ -39,13 +46,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Add fields
         Object.keys(fields).forEach(key => {
-            // Handle array fields if any (formidable might return arrays)
             const value = Array.isArray(fields[key]) ? fields[key][0] : fields[key];
             formData.append(key, value);
         });
 
         // Add file
-        // Formidable v3+ structure might vary, but usually files.upload is an array or object
         const uploadFile = Array.isArray(files.upload) ? files.upload[0] : files.upload;
 
         if (uploadFile) {
@@ -55,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
         }
 
-        const response = await axios.post(
+        const response = await axiosInstance.post(
             `${ckanUrl}/api/3/action/resource_create`,
             formData,
             {

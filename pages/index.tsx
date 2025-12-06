@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 interface Dataset {
   id: string;
+  name: string;
   title: string;
   notes?: string;
   num_resources?: number;
