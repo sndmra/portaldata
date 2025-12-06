@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 
 
-// const CKAN_API = 'http://localhost:5001/api/3';
+
 
 interface Activity {
     id: string;

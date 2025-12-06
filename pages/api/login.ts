@@ -24,47 +24,118 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+        const CKAN_URL = getCkanUrl();
+
+        // Step 0: FIRST check if user exists in CKAN before attempting login
+        try {
+            const userCheckResponse = await axiosInstance.get(`${CKAN_URL}/api/3/action/user_show`, {
+                params: { id: username },
+                headers: {
+                    'Authorization': SYSADMIN_API_TOKEN
+                }
+            });
+
+            if (!userCheckResponse.data.success) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Akun tidak terdaftar. Silakan daftar terlebih dahulu.'
+                });
+            }
+        } catch (userCheckError: any) {
+            // If user_show fails with 404 or similar, user doesn't exist
+            if (userCheckError.response?.status === 404 ||
+                userCheckError.response?.data?.error?.message?.includes('Not Found')) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Akun tidak terdaftar. Silakan daftar terlebih dahulu.'
+                });
+            }
+            // For other errors, continue but log
+            console.error('Error checking user existence:', userCheckError.message);
+        }
+
         // Step 1: Verify credentials by attempting to log in to CKAN web interface
-        // We use URLSearchParams to send form-urlencoded data
         const params = new URLSearchParams();
         params.append('login', username);
         params.append('password', password);
 
-        // We need to hit the generic login endpoint
-        // Note: CKAN might redirect on success. We need to check if we get a session cookie or redirect.
-        // However, axios follows redirects by default.
-        // If login fails, CKAN usually returns the login page again (200 OK) but with an error message in HTML.
-        // If login succeeds, it redirects to the dashboard or user page.
-
-        // A better way to verify credentials without parsing HTML is to check if the response URL changed
-        // or if we got a specific cookie.
-        // But actually, since we have a sysadmin token, we can just use it to fetch the user?
-        // NO, we must verify the password first. The sysadmin token allows us to fetch the API key, 
-        // but it doesn't help us verify the user's password unless we trust the user input (which we don't).
-
-        // Let's try the POST request.
-        console.log('Attempting login for user:', username);
-        const CKAN_URL = getCkanUrl();
         const loginResponse = await axiosInstance.post(`${CKAN_URL}/login_generic`, params, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            maxRedirects: 0, // Don't follow redirects so we can check the 302 status
-            validateStatus: (status) => status >= 200 && status < 500, // Accept all status codes for debugging
+            maxRedirects: 0,
+            validateStatus: (status) => status >= 200 && status < 500,
         });
 
-        console.log('Login response status:', loginResponse.status);
-        console.log('Login response headers:', loginResponse.headers);
 
-        // Check if we got a redirect (302) which usually indicates success in CKAN
-        // If we get 200, it means we are still on the login page (failure)
+        // Check if we got a redirect (302/303)
         if (loginResponse.status === 302 || loginResponse.status === 303) {
-            console.log('Login successful (redirect detected)');
+            const redirectLocation = loginResponse.headers.location || '';
+
+            // CRITICAL: Check the __logins parameter in the redirect URL
+            // CKAN uses /user/logged_in?__logins=X where X is the login attempt count
+            // On SUCCESSFUL login: __logins stays at 0 or low
+            // On FAILED login: CKAN typically redirects back to login page OR sets __logins > 0
+
+            // Parse the redirect URL to check for failure indicators
+            try {
+                const redirectUrl = new URL(redirectLocation);
+                const loginsParam = redirectUrl.searchParams.get('__logins');
+
+                // If __logins parameter exists and is greater than 0, login failed
+                if (loginsParam && parseInt(loginsParam, 10) > 0) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Username atau password salah.'
+                    });
+                }
+
+                // Also check if redirecting back to login page
+                if (redirectUrl.pathname.includes('/login') && !redirectUrl.pathname.includes('/logged_in')) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Username atau password salah.'
+                    });
+                }
+
+                // Follow the redirect to verify authentication succeeded
+                const setCookies = loginResponse.headers['set-cookie'] || [];
+                const cookieString = Array.isArray(setCookies) ? setCookies.join('; ') : setCookies;
+
+                // Make a follow-up request to logged_in endpoint to verify session
+                const verifyResponse = await axiosInstance.get(redirectLocation, {
+                    maxRedirects: 5,
+                    validateStatus: (status) => status >= 200 && status < 500,
+                    headers: {
+                        'Cookie': cookieString
+                    }
+                });
+
+                const responseData = typeof verifyResponse.data === 'string' ? verifyResponse.data : '';
+
+                // Check if we ended up on login page or got an error
+                if (responseData.includes('field-login') || responseData.includes('Login failed') || responseData.includes('Bad Credentials')) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Username atau password salah.'
+                    });
+                }
+
+            } catch (urlError) {
+                console.error('Error parsing redirect URL:', urlError);
+                // If we can't parse, try a simple check
+                if (redirectLocation.includes('/login') && !redirectLocation.includes('/logged_in')) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Username atau password salah.'
+                    });
+                }
+            }
+
             // Login successful!
 
             // Step 2: Fetch user details and API Key using Sysadmin Token
             // We use a new axios instance or ensure headers are clean
-            console.log('Fetching user details for:', username);
 
             try {
                 const userResponse = await axiosInstance.get(`${CKAN_URL}/api/3/action/user_show`, {
@@ -80,7 +151,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
                 // If user has no legacy API key, generate a new API Token
                 if (!apiKey) {
-                    console.log('No legacy API key found, generating new token...');
                     try {
                         const tokenResponse = await axiosInstance.post(`${getCkanUrl()}/api/3/action/api_token_create`, {
                             user: username,
@@ -92,7 +162,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                             }
                         });
                         apiKey = tokenResponse.data.result.token;
-                        console.log('New token generated successfully');
                     } catch (tokenError: any) {
                         console.error('Error creating token:', tokenError.message);
                         if (tokenError.response) {
@@ -115,10 +184,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 });
             } catch (userError: any) {
                 console.error('Error fetching user details:', userError.message);
-                if (userError.code === 'ECONNRESET' || userError.message.includes('socket hang up')) {
-                    return res.status(500).json({ message: 'Backend connection failed. Please try again.' });
+
+                // Check if user doesn't exist (404) or is unauthorized (403)
+                if (userError.response?.status === 404 || userError.response?.status === 403) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Akun tidak ditemukan. Pengguna mungkin telah dihapus dari sistem.'
+                    });
                 }
-                return res.status(500).json({ message: 'Failed to retrieve user details.' });
+
+                if (userError.code === 'ECONNRESET' || userError.message.includes('socket hang up')) {
+                    return res.status(500).json({ success: false, message: 'Backend connection failed. Please try again.' });
+                }
+
+                // Generic error - could be user not found
+                return res.status(401).json({
+                    success: false,
+                    message: 'Gagal mengambil data pengguna. Akun mungkin tidak ditemukan.'
+                });
             }
         } else {
             // Login failed (likely returned 200 OK with login form)

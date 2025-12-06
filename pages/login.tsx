@@ -6,9 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 
 import Link from 'next/link';
 
-import { getCkanUrl } from '@/lib/ckan';
 
-// const CKAN_API = 'http://localhost:5001/api/3';
 
 export default function Login() {
     const router = useRouter();
@@ -17,7 +15,7 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const { registered } = router.query; // Keep registered from original code
+    const { registered, expired } = router.query; // Get query params
 
     useEffect(() => {
         // Redirect to upload if already authenticated
@@ -33,9 +31,12 @@ export default function Login() {
 
         try {
             // 1. Login to get API Key (using our proxy API)
+            // Use validateStatus to prevent axios from throwing on 4xx errors
             const loginRes = await axios.post('/api/login', {
                 username: username,
                 password: password
+            }, {
+                validateStatus: (status) => status < 500 // Don't throw on 4xx, only on 5xx
             });
 
             if (loginRes.data.success) {
@@ -54,10 +55,18 @@ export default function Login() {
                 } else {
                     router.push('/');
                 }
+            } else {
+                // Login failed - show error message from response
+                const errorMessage = loginRes.data.message || 'Login gagal. Periksa username dan password Anda.';
+                setError(errorMessage);
             }
         } catch (err: any) {
-            console.error('Login error:', err); // Updated error message as per snippet
-            setError(err.response?.data?.error?.message || 'Login failed. Please check your credentials.'); // Updated error message as per snippet
+            console.error('Login error:', err);
+            // Only network/server errors should reach here
+            const errorMessage = err.response?.data?.message ||
+                err.response?.data?.error?.message ||
+                'Terjadi kesalahan server. Silakan coba lagi.';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -83,6 +92,15 @@ export default function Login() {
                             Masukkan username dan password Anda untuk mengakses fitur upload dataset.
                         </p>
                     </div>
+
+                    {expired && (
+                        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-md text-amber-700 text-sm flex items-center">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Sesi Anda telah berakhir atau akun tidak ditemukan. Silakan login kembali.
+                        </div>
+                    )}
 
                     {registered && (
                         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm flex items-center">

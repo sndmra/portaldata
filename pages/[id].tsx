@@ -7,7 +7,7 @@ import FileViewer from '@/components/FileViewer';
 import Head from 'next/head';
 import { useAuth } from '@/hooks/useAuth';
 
-// const CKAN_API = 'http://localhost:5001/api/3';
+
 
 interface Resource {
     id: string;

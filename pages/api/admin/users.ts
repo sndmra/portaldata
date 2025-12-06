@@ -12,11 +12,28 @@ const axiosInstance = axios.create({
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    // Verify if the requester is authorized (in a real app, we'd check the session/token here)
-    // For this prototype, we assume the frontend checks 'isSysadmin' and we rely on the sysadmin token for CKAN calls.
-    // Ideally, we should verify the user's token from the request header against CKAN to ensure they are a sysadmin.
+    // Security: Verify the requester's token is from a sysadmin user
+    const callerToken = req.headers.authorization;
 
-    // Simple check: ensure we have the sysadmin token configured
+    if (!callerToken) {
+        return res.status(401).json({ message: 'Authorization required' });
+    }
+
+    // Verify caller is a sysadmin by checking their user info
+    try {
+        const userResponse = await axiosInstance.get(`${getCkanUrl()}/api/3/action/user_show`, {
+            params: { id: 'me' },
+            headers: { Authorization: callerToken }
+        });
+
+        if (!userResponse.data.success || !userResponse.data.result.sysadmin) {
+            return res.status(403).json({ message: 'Access denied. Sysadmin privileges required.' });
+        }
+    } catch (authError: any) {
+        return res.status(403).json({ message: 'Invalid token or access denied' });
+    }
+
+    // Simple check: ensure we have the sysadmin token configured for operations
     if (!SYSADMIN_API_TOKEN) {
         return res.status(500).json({ message: 'Server misconfiguration: Missing Sysadmin Token' });
     }

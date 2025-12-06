@@ -16,8 +16,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const apiKey = req.headers.authorization;
 
     // Log for debugging
-    console.log('[Resource Proxy] Received URL parameter:', url);
-    console.log('[Resource Proxy] Query params:', req.query);
 
     if (!url || typeof url !== 'string') {
         console.error('[Resource Proxy] Invalid URL:', url);
@@ -33,7 +31,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (ckanBackendUrl && (url.includes('localhost:5001') || url.includes('localhost:5002'))) {
         // Replace localhost:5001 or localhost:5002 with actual CKAN URL
         resourceUrl = url.replace(/http:\/\/localhost:500[12]/, ckanBackendUrl);
-        console.log('[Resource Proxy] Rewrote localhost URL:', url, '->', resourceUrl);
     }
 
     // Validate URL format
@@ -49,7 +46,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log('[Resource Proxy] Fetching resource from:', resourceUrl);
 
         // Fetch resource from CKAN with auth headers
         const response = await axios.get(resourceUrl, {
@@ -58,7 +54,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             maxContentLength: 10 * 1024 * 1024, // 10MB limit
         });
 
-        console.log('[Resource Proxy] Successfully fetched resource, size:', response.data.length, 'bytes');
 
         // Forward content-type from CKAN response
         const contentType = response.headers['content-type'] || 'application/octet-stream';

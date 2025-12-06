@@ -3,9 +3,8 @@ import axios from 'axios';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/hooks/useAuth';
-import { getCkanUrl } from '@/lib/ckan';
 
-// const CKAN_API = 'http://localhost:5001/api/3';
+
 
 interface Organization {
     id: string;

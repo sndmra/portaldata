@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { getCkanUrl } from '@/lib/ckan'; // Added this import
+import axios from 'axios';
 
 const API_KEY_STORAGE = 'ckan_api_key';
 const USER_STORAGE = 'portal_user';
@@ -13,18 +13,68 @@ export function useAuth() {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
-    useEffect(() => {
-        // Load API key, user, and sysadmin status from localStorage on mount
-        const storedKey = localStorage.getItem(API_KEY_STORAGE);
-        const storedUser = localStorage.getItem(USER_STORAGE);
-        const storedSysadmin = localStorage.getItem(SYSADMIN_STORAGE) === 'true';
+    // Clear all stored credentials
+    const clearCredentials = () => {
+        localStorage.removeItem(API_KEY_STORAGE);
+        localStorage.removeItem(USER_STORAGE);
+        localStorage.removeItem(SYSADMIN_STORAGE);
+        setApiKey(null);
+        setUser(null);
+        setIsSysadmin(false);
+    };
 
-        setApiKey(storedKey);
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-        setIsSysadmin(storedSysadmin);
-        setIsLoading(false);
+    useEffect(() => {
+        const validateSession = async () => {
+            const storedKey = localStorage.getItem(API_KEY_STORAGE);
+            const storedUser = localStorage.getItem(USER_STORAGE);
+            const storedSysadmin = localStorage.getItem(SYSADMIN_STORAGE) === 'true';
+
+            // If no stored credentials, just finish loading
+            if (!storedKey || !storedUser) {
+                setIsLoading(false);
+                return;
+            }
+
+            const userData = JSON.parse(storedUser);
+
+            // Validate the session by checking if user exists
+            try {
+                const response = await axios.get('/api/profile', {
+                    params: { action: 'user', userId: userData.id },
+                    headers: { Authorization: storedKey }
+                });
+
+                if (response.data.success) {
+                    // Session is valid
+                    setApiKey(storedKey);
+                    setUser(userData);
+                    setIsSysadmin(storedSysadmin);
+                } else {
+                    // Session invalid - clear credentials
+                    clearCredentials();
+                    if (!window.location.pathname.startsWith('/login')) {
+                        router.push('/login?expired=true');
+                    }
+                }
+            } catch (error: any) {
+                // If we get 403 or 404, user doesn't exist anymore
+                if (error.response?.status === 403 || error.response?.status === 404 || error.response?.status === 500) {
+                    clearCredentials();
+                    if (!window.location.pathname.startsWith('/login')) {
+                        router.push('/login?expired=true');
+                    }
+                } else {
+                    // For network errors, still set the cached credentials but user might see errors
+                    setApiKey(storedKey);
+                    setUser(userData);
+                    setIsSysadmin(storedSysadmin);
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        validateSession();
     }, []);
 
     const login = (key: string, userData: any, isSysadminUser: boolean = false) => {
@@ -38,12 +88,7 @@ export function useAuth() {
     };
 
     const logout = () => {
-        localStorage.removeItem(API_KEY_STORAGE);
-        localStorage.removeItem(USER_STORAGE);
-        localStorage.removeItem(SYSADMIN_STORAGE);
-        setApiKey(null);
-        setUser(null);
-        setIsSysadmin(false);
+        clearCredentials();
         router.push('/login');
     };
 

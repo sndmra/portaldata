@@ -24,7 +24,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log('Attempting to create user:', username);
 
         const response = await axiosInstance.post(`${getCkanUrl()}/api/3/action/user_create`, {
             name: username,
@@ -39,7 +38,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
 
         if (response.data.success) {
-            console.log('User created successfully:', username);
             return res.status(201).json({ success: true, user: response.data.result });
         } else {
             throw new Error('CKAN returned success: false');

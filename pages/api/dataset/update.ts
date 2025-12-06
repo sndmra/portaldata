@@ -15,7 +15,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
         const ckanUrl = getCkanUrl();
-        console.log('[Dataset Update Proxy] Updating dataset at:', `${ckanUrl}/api/3/action/package_update`);
 
         const response = await axios.post(
             `${ckanUrl}/api/3/action/package_update`,

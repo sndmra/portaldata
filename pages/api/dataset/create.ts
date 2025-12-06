@@ -15,7 +15,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
         const ckanUrl = getCkanUrl();
-        console.log('[Dataset Create Proxy] Creating dataset at:', `${ckanUrl}/api/3/action/package_create`);
 
         const response = await axios.post(
             `${ckanUrl}/api/3/action/package_create`,

@@ -1,14 +1,10 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import axios from 'axios';
+import api from '@/lib/api';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import DatasetCard from '@/components/DatasetCard';
 import { useAuth } from '@/hooks/useAuth';
 
-import { getCkanUrl } from '@/lib/ckan';
-
-// Use localhost:5001 for server-side/client-side consistency in this prototype
-// const CKAN_API = 'http://localhost:5001/api/3';
 
 interface Dataset {
   id: string;
@@ -107,12 +103,12 @@ export default function Home() {
       if (key) headers.Authorization = key;
 
       // Fetch Top 3 Datasets and Statistics using proxy API
-      const datasetsReq = axios.get('/api/search', {
+      const datasetsReq = api.get('/api/search', {
         params: { rows: 3, sort: 'metadata_modified desc', include_private: true },
         headers
       });
 
-      const statsReq = axios.get('/api/stats', { headers });
+      const statsReq = api.get('/api/stats', { headers });
 
       const [datasetsRes, statsRes] = await Promise.all([
         datasetsReq,
