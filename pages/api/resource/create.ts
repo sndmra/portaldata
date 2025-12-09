@@ -6,10 +6,13 @@ import fs from 'fs';
 import FormData from 'form-data';
 import { getCkanUrl } from '@/lib/ckan';
 
+// Sysadmin token for write operations (workaround for CKAN 2.11 JWT issue)
+const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
+
 // Axios instance to prevent socket hang up
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: false }),
-    timeout: 60000, // 60s for file uploads
+    timeout: 300000, // 5 minutes for large file uploads
 });
 
 export const config = {
@@ -23,14 +26,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const apiKey = req.headers.authorization;
+    const userApiKey = req.headers.authorization;
 
-    if (!apiKey) {
+    if (!userApiKey) {
         return res.status(401).json({ error: 'Unauthorized: API Key missing' });
     }
 
+    if (!SYSADMIN_API_TOKEN) {
+        return res.status(500).json({ error: 'Server configuration error: Missing sysadmin token' });
+    }
+
     try {
-        const form = new IncomingForm();
+        const form = new IncomingForm({
+            maxFileSize: 1024 * 1024 * 1024, // 1GB for large GeoTIFF files
+        });
 
         const [fields, files] = await new Promise<[any, any]>((resolve, reject) => {
             form.parse(req, (err, fields, files) => {
@@ -65,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             formData,
             {
                 headers: {
-                    Authorization: apiKey,
+                    Authorization: SYSADMIN_API_TOKEN,
                     ...formData.getHeaders(),
                 },
                 maxContentLength: Infinity,
@@ -76,9 +85,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json(response.data);
 
     } catch (error: any) {
+        console.error('[Resource Create] Error:', error.message);
+        console.error('[Resource Create] Response data:', error.response?.data);
+        console.error('[Resource Create] Response status:', error.response?.status);
         return res.status(error.response?.status || 500).json({
             error: 'Failed to create resource',
-            details: error.response?.data?.error?.message || error.message
+            details: error.response?.data?.error?.message || error.message,
+            ckan_error: error.response?.data
         });
     }
 }

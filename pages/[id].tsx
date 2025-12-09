@@ -70,6 +70,7 @@ export default function DatasetDetail() {
     const [activities, setActivities] = useState<Activity[]>([]);
     const [loadingActivities, setLoadingActivities] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [userOrgs, setUserOrgs] = useState<string[]>([]);
     const [viewingResource, setViewingResource] = useState<Resource | null>(null);
 
@@ -199,10 +200,7 @@ export default function DatasetDetail() {
     };
 
     const handleDelete = async () => {
-        if (!confirm('Apakah Anda yakin ingin menghapus dataset ini? Tindakan ini tidak dapat dibatalkan.')) {
-            return;
-        }
-
+        setShowDeleteConfirm(false);
         setDeleting(true);
         try {
             // Use proxy API instead of direct CKAN call
@@ -299,7 +297,7 @@ export default function DatasetDetail() {
                             Edit
                         </button>
                         <button
-                            onClick={handleDelete}
+                            onClick={() => setShowDeleteConfirm(true)}
                             disabled={deleting}
                             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -308,6 +306,32 @@ export default function DatasetDetail() {
                             </svg>
                             {deleting ? 'Menghapus...' : 'Hapus Dataset'}
                         </button>
+                    </div>
+                )}
+
+                {/* Delete Confirmation Modal */}
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
+                            <h3 className="text-lg font-bold text-gray-900 mb-4">Konfirmasi Hapus</h3>
+                            <p className="text-gray-600 mb-6">
+                                Apakah Anda yakin ingin menghapus dataset "{dataset?.title}"? Tindakan ini tidak dapat dibatalkan.
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                >
+                                    Ya, Hapus
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

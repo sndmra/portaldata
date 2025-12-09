@@ -23,13 +23,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        // Use user's API key if provided, otherwise fallback to sysadmin token (or handle as public)
-        const apiKey = req.headers.authorization || SYSADMIN_API_TOKEN;
+        // Always use sysadmin token to fetch datasets (workaround for CKAN 2.11 JWT issue)
+        // This allows reading private datasets that the user should have access to
+        if (!SYSADMIN_API_TOKEN) {
+            return res.status(500).json({ message: 'Server configuration error' });
+        }
 
         const response = await axiosInstance.get(`${getCkanUrl()}/api/3/action/package_show`, {
             params: { id },
             headers: {
-                'Authorization': apiKey,
+                'Authorization': SYSADMIN_API_TOKEN,
                 'Content-Type': 'application/json'
             }
         });

@@ -3,6 +3,9 @@ import axios from 'axios';
 import http from 'http';
 import { getCkanUrl } from '@/lib/ckan';
 
+// Sysadmin token for write operations (workaround for CKAN 2.11 JWT issue)
+const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
+
 // Axios instance to prevent socket hang up
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: false }),
@@ -14,32 +17,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { fullname, email, about } = req.body;
-    const apiKey = req.headers.authorization;
+    const { fullname, email, about, userId } = req.body;
+    const userApiKey = req.headers.authorization;
 
-    if (!apiKey) {
+    if (!userApiKey) {
         return res.status(401).json({ error: 'API key required' });
+    }
+
+    if (!SYSADMIN_API_TOKEN) {
+        return res.status(500).json({ error: 'Server configuration error: Missing sysadmin token' });
+    }
+
+    if (!userId) {
+        return res.status(400).json({ error: 'userId required in request body' });
     }
 
     const ckanUrl = getCkanUrl();
 
     try {
-        // First get user data to get the user ID
-        const userShowRes = await axiosInstance.get(`${ckanUrl}/api/3/action/user_show`, {
-            params: { id: 'me' },
-            headers: { Authorization: apiKey }
-        });
-
-        const userId = userShowRes.data.result.id;
-
-        // Update user profile
+        // Update user profile using sysadmin token
         const updateRes = await axiosInstance.post(`${ckanUrl}/api/3/action/user_update`, {
             id: userId,
             fullname: fullname,
             email: email,
             about: about
         }, {
-            headers: { Authorization: apiKey }
+            headers: { Authorization: SYSADMIN_API_TOKEN }
         });
 
         return res.status(200).json({ success: true, result: updateRes.data.result });

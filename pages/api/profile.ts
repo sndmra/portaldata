@@ -40,37 +40,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         switch (action) {
             case 'activities': {
-                // Fetch dashboard activities
-                const activitiesRes = await axios.get(`${ckanUrl}/api/3/action/dashboard_activity_list`, {
-                    headers: { Authorization: apiKey }
-                });
-                const activitiesData = activitiesRes.data.result.slice(0, 20);
+                // Fetch dashboard activities - may not be available in CKAN 2.11 without activity plugin
+                try {
+                    const activitiesRes = await axios.get(`${ckanUrl}/api/3/action/dashboard_activity_list`, {
+                        headers: { Authorization: apiKey }
+                    });
+                    const activitiesData = activitiesRes.data.result?.slice(0, 20) || [];
 
-                // Fetch username for each activity
-                const activitiesWithUsernames = await Promise.all(
-                    activitiesData.map(async (activity: any) => {
-                        try {
-                            const userResponse = await axios.get(
-                                `${ckanUrl}/api/3/action/user_show?id=${activity.user_id}`,
-                                { headers: { Authorization: apiKey } }
-                            );
-                            return {
-                                ...activity,
-                                username: userResponse.data.result.name ||
-                                    userResponse.data.result.display_name ||
-                                    activity.user_id
-                            };
-                        } catch (error) {
-                            console.error('Error fetching user:', error);
-                            return {
-                                ...activity,
-                                username: activity.user_id
-                            };
-                        }
-                    })
-                );
+                    // Fetch username for each activity
+                    const activitiesWithUsernames = await Promise.all(
+                        activitiesData.map(async (activity: any) => {
+                            try {
+                                const userResponse = await axios.get(
+                                    `${ckanUrl}/api/3/action/user_show?id=${activity.user_id}`,
+                                    { headers: { Authorization: apiKey } }
+                                );
+                                return {
+                                    ...activity,
+                                    username: userResponse.data.result.name ||
+                                        userResponse.data.result.display_name ||
+                                        activity.user_id
+                                };
+                            } catch (error) {
+                                return {
+                                    ...activity,
+                                    username: activity.user_id
+                                };
+                            }
+                        })
+                    );
 
-                return res.status(200).json({ success: true, result: activitiesWithUsernames });
+                    return res.status(200).json({ success: true, result: activitiesWithUsernames });
+                } catch (activityError: any) {
+                    // Activity APIs may not be available in CKAN 2.11 - return empty array
+                    return res.status(200).json({ success: true, result: [] });
+                }
             }
 
             case 'datasets': {

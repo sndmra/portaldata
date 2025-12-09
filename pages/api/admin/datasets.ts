@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Verify caller token is valid (trusting frontend sysadmin check)
     try {
-        await axiosInstance.get(`${getCkanUrl()}/api/3/action/site_read`, {
+        await axiosInstance.get(`${getCkanUrl()}/api/3/action/status_show`, {
             headers: { Authorization: callerToken }
         });
     } catch (error) {

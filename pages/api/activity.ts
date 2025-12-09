@@ -23,8 +23,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const ckanUrl = getCkanUrl();
-    console.log(`[Activity API] Fetching activities for dataset: ${id}`);
-    console.log(`[Activity API] CKAN URL: ${ckanUrl}/api/3/action/package_activity_list`);
 
     try {
         const response = await axiosInstance.get(`${ckanUrl}/api/3/action/package_activity_list`, {
@@ -39,13 +37,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
         });
 
-        // Debug: Log what CKAN returned
-        console.log(`[Activity API] CKAN returned ${response.data.result?.length || 0} activities`);
-        if (response.data.result && response.data.result.length > 0) {
-            console.log(`[Activity API] Most recent activity:`, {
-                timestamp: response.data.result[0].timestamp,
-                activity_type: response.data.result[0].activity_type,
-                user_id: response.data.result[0].user_id
+        // Filter out redundant "updated" activities that happen right after "created"
+        // This occurs when uploading a dataset with resources - resource_create triggers package_update
+        let filteredActivities = response.data.result || [];
+        if (filteredActivities.length > 1) {
+            const createdActivities = new Map<string, Date>();
+
+            // First pass: find all "new package" activities
+            filteredActivities.forEach((activity: any) => {
+                if (activity.activity_type === 'new package') {
+                    const key = `${activity.object_id}-${activity.user_id}`;
+                    createdActivities.set(key, new Date(activity.timestamp));
+                }
+            });
+
+            // Second pass: filter out "changed package" activities within 60 seconds of creation
+            filteredActivities = filteredActivities.filter((activity: any) => {
+                if (activity.activity_type === 'changed package') {
+                    const key = `${activity.object_id}-${activity.user_id}`;
+                    const createdTime = createdActivities.get(key);
+                    if (createdTime) {
+                        const changedTime = new Date(activity.timestamp);
+                        const diffSeconds = Math.abs((changedTime.getTime() - createdTime.getTime()) / 1000);
+                        if (diffSeconds <= 60) {
+                            return false; // Filter out this activity
+                        }
+                    }
+                }
+                return true;
             });
         }
 
@@ -54,10 +73,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
 
-        return res.status(200).json(response.data);
+        return res.status(200).json({ ...response.data, result: filteredActivities });
     } catch (error: any) {
         console.error('[Activity API] Error:', error.message);
         if (error.response) {
+            // Check if this is because activity APIs are not available in CKAN 2.11
+            const errorMsg = error.response.data;
+            if (typeof errorMsg === 'string' && errorMsg.includes('Action name not known')) {
+                return res.status(200).json({ success: true, result: [] });
+            }
             console.error('[Activity API] CKAN error response:', error.response.data);
             return res.status(error.response.status).json(error.response.data);
         }

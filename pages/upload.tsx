@@ -177,7 +177,8 @@ export default function Upload() {
             );
 
             const packageId = packageRes.data.result.id;
-            console.log('Dataset created with ID:', packageId);
+            const packageName = packageRes.data.result.name;
+            console.log('Dataset created with ID:', packageId, 'Name:', packageName);
 
             // 2. Upload Resources
             // Combine files list with currentFile if it exists
@@ -244,7 +245,7 @@ export default function Upload() {
             }
 
             setMessage('Dataset berhasil dibuat!');
-            setTimeout(() => router.push(`/${packageId}`), 1500);
+            setTimeout(() => router.push(`/${packageName}`), 1500);
         } catch (error: any) {
             console.error('Upload process error:', error);
             const errorMsg = error.response?.data?.error?.message || 'Gagal membuat dataset. Periksa koneksi dan coba lagi.';
@@ -461,6 +462,14 @@ export default function Upload() {
                                                 Dataset Privat (hanya dapat dilihat oleh anggota organisasi)
                                             </span>
                                         </label>
+                                        {isPrivate && !organization && (
+                                            <p className="mt-2 text-sm text-red-600 flex items-center">
+                                                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                </svg>
+                                                Dataset privat harus memiliki organisasi. Silakan pilih organisasi di atas.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -696,8 +705,9 @@ export default function Upload() {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={loading}
+                                    disabled={loading || (isPrivate && !organization) || (files.length === 0 && !currentFile)}
                                     className="px-6 py-2 bg-primary text-white rounded-md hover:bg-secondary transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={(files.length === 0 && !currentFile) ? 'Pilih minimal satu file untuk diunggah' : ''}
                                 >
                                     {loading ? 'Mengunggah...' : 'Publikasikan Dataset'}
                                 </button>

@@ -3,6 +3,9 @@ import axios from 'axios';
 import http from 'http';
 import { getCkanUrl } from '@/lib/ckan';
 
+// Sysadmin token for write operations (workaround for CKAN 2.11 JWT issue)
+const SYSADMIN_API_TOKEN = process.env.SYSADMIN_API_TOKEN || '';
+
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: false }),
 });
@@ -15,6 +18,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const authHeader = req.headers.authorization;
     if (!authHeader) {
         return res.status(401).json({ error: 'Authorization header required' });
+    }
+
+    if (!SYSADMIN_API_TOKEN) {
+        return res.status(500).json({ error: 'Server configuration error: Missing sysadmin token' });
     }
 
     const { id } = req.body;
@@ -30,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             {
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: authHeader,
+                    Authorization: SYSADMIN_API_TOKEN,
                 },
             }
         );

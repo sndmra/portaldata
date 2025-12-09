@@ -44,8 +44,29 @@ const GeoRasterLayerComponent = ({ georaster }: { georaster: any }) => {
         if (georaster && map) {
             const layer = new GeoRasterLayer({
                 georaster: georaster,
-                opacity: 0.7,
-                resolution: 96
+                opacity: 1.0,
+                resolution: 512, // Higher resolution for sharper image
+                // Make white/near-white pixels (NoData) transparent
+                pixelValuesToColorFn: (values: number[]) => {
+                    // For RGB GeoTIFF: values = [R, G, B] or [R, G, B, A]
+                    if (!values || values.length < 3) return null;
+
+                    const [r, g, b] = values;
+
+                    // Treat white or near-white pixels as NoData (transparent)
+                    // These are typically the background/padding areas in orthophotos
+                    if (r >= 250 && g >= 250 && b >= 250) {
+                        return null; // Transparent
+                    }
+
+                    // Also handle pure black (sometimes used as NoData)
+                    if (r === 0 && g === 0 && b === 0) {
+                        return null; // Transparent
+                    }
+
+                    // Return normal color for valid pixels
+                    return `rgb(${r}, ${g}, ${b})`;
+                }
             });
             layer.addTo(map);
             map.fitBounds(layer.getBounds());
@@ -87,14 +108,24 @@ export default function GeoViewer({ resourceUrl, fileName, format }: GeoViewerPr
                 setGeoData(response.data);
                 // Calculate bounds for GeoJSON would be done by Leaflet automatically when added
             } else if (['tif', 'tiff'].includes(ext || '')) {
-                // Use proxy API to fetch GeoTIFF
-                const response = await axios.get('/api/resource', {
-                    params: { url: resourceUrl },
-                    responseType: 'arraybuffer'
-                });
-                const arrayBuffer = response.data;
-                const raster = await parseGeoraster(arrayBuffer);
-                setGeoraster(raster);
+                // For large GeoTIFF files, load directly from CKAN to avoid Node.js memory issues
+                // CKAN has CORS enabled, so direct fetch should work
+                try {
+                    // Try direct fetch first (works if CORS is enabled on CKAN)
+                    const raster = await parseGeoraster(resourceUrl);
+                    setGeoraster(raster);
+                } catch (directError: any) {
+                    // Fallback to proxy for smaller files or if CORS fails
+                    console.warn('Direct GeoTIFF load failed, trying proxy:', directError.message);
+                    const response = await axios.get('/api/resource', {
+                        params: { url: resourceUrl },
+                        responseType: 'arraybuffer',
+                        timeout: 300000 // 5 minute timeout
+                    });
+                    const arrayBuffer = response.data;
+                    const raster = await parseGeoraster(arrayBuffer);
+                    setGeoraster(raster);
+                }
             } else {
                 setError('Format geospatial tidak didukung.');
             }
@@ -129,10 +160,19 @@ export default function GeoViewer({ resourceUrl, fileName, format }: GeoViewerPr
                 zoom={10}
                 style={{ height: '100%', width: '100%' }}
             >
-                <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+                {georaster ? (
+                    // Use satellite imagery basemap for GeoTIFF - blends better with orthophotos
+                    <TileLayer
+                        attribution='Tiles &copy; Esri'
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    />
+                ) : (
+                    // Use OSM for GeoJSON and other vector data
+                    <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                )}
 
                 {geoData && (
                     <GeoJSON

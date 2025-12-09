@@ -87,14 +87,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.error('Error checking user existence:', userCheckError.message);
         }
 
-        // Step 1: Verify credentials by attempting to log in to CKAN web interface
+        // Step 1: Get CSRF token from login page (required in CKAN 2.10+)
+        const loginPageResponse = await axiosInstance.get(`${CKAN_URL}/user/login`, {
+            validateStatus: (status) => status >= 200 && status < 500,
+        });
+
+        // Extract CSRF token from the response
+        let csrfToken = '';
+        const setCookies = loginPageResponse.headers['set-cookie'] || [];
+        const cookieString = Array.isArray(setCookies) ? setCookies.join('; ') : setCookies;
+
+        // Extract CSRF token from HTML meta tag
+        const htmlContent = typeof loginPageResponse.data === 'string' ? loginPageResponse.data : '';
+        const csrfMatch = htmlContent.match(/name="_csrf_token"\s+content="([^"]+)"/);
+        if (csrfMatch) {
+            csrfToken = csrfMatch[1];
+        }
+
+        if (!csrfToken) {
+            console.error('Could not extract CSRF token from login page');
+            return res.status(500).json({ message: 'Login system error. Please try again.' });
+        }
+
+        // Step 2: Submit login form with CSRF token
         const params = new URLSearchParams();
         params.append('login', username);
         params.append('password', password);
+        params.append('_csrf_token', csrfToken);
 
-        const loginResponse = await axiosInstance.post(`${CKAN_URL}/login_generic`, params, {
+        const loginResponse = await axiosInstance.post(`${CKAN_URL}/user/login`, params, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
+                'Cookie': cookieString,
             },
             maxRedirects: 0,
             validateStatus: (status) => status >= 200 && status < 500,
@@ -183,18 +207,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 let apiKey = userData.apikey;
 
                 // If user has no legacy API key, generate a new API Token
+                // In CKAN 2.11, we need to use the user's own session to create their token
                 if (!apiKey) {
                     try {
                         // Cleanup old frontend-login tokens before creating a new one
                         await cleanupOldFrontendTokens(username, CKAN_URL);
 
-                        // Create new token
+                        // Get the session cookies from the login response (already captured above)
+                        const loginCookies = loginResponse.headers['set-cookie'] || [];
+                        const loginCookieString = Array.isArray(loginCookies) ? loginCookies.join('; ') : loginCookies;
+
+                        // Create new token using the user's authenticated session
                         const tokenResponse = await axiosInstance.post(`${getCkanUrl()}/api/3/action/api_token_create`, {
                             user: username,
                             name: `frontend-login-${Date.now()}`
                         }, {
                             headers: {
-                                'Authorization': SYSADMIN_API_TOKEN,
+                                'Cookie': loginCookieString,
                                 'Content-Type': 'application/json'
                             }
                         });
@@ -204,7 +233,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                         if (tokenError.response) {
                             console.error('Token error response:', tokenError.response.data);
                         }
-                        return res.status(500).json({ message: 'Failed to generate API token for user.' });
+                        // If token creation fails, try using sysadmin token (for backward compatibility)
+                        try {
+                            const fallbackResponse = await axiosInstance.post(`${getCkanUrl()}/api/3/action/api_token_create`, {
+                                user: username,
+                                name: `frontend-login-${Date.now()}`
+                            }, {
+                                headers: {
+                                    'Authorization': SYSADMIN_API_TOKEN,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            apiKey = fallbackResponse.data.result.token;
+                        } catch (fallbackError: any) {
+                            console.error('Fallback token creation also failed:', fallbackError.message);
+                            return res.status(500).json({ message: 'Failed to generate API token for user.' });
+                        }
                     }
                 }
 

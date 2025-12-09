@@ -220,7 +220,11 @@ export default function Profile() {
         setUpdateMessage('');
 
         try {
+            const userStr = localStorage.getItem('portal_user');
+            const user = userStr ? JSON.parse(userStr) : null;
+
             await axios.post('/api/profile/update', {
+                userId: user?.id,
                 fullname: fullname,
                 email: email,
                 about: about

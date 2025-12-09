@@ -5,12 +5,12 @@ import http from 'http';
 // Axios instance to prevent socket hang up
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: false }),
-    timeout: 30000, // 30s for file downloads
+    timeout: 300000, // 5 minutes for large GeoTIFF downloads
 });
 
 export const config = {
     api: {
-        responseLimit: '10mb', // Support larger files
+        responseLimit: '500mb', // Support large GeoTIFF files
     },
 };
 
@@ -50,7 +50,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const response = await axiosInstance.get(resourceUrl, {
             responseType: 'arraybuffer',
             headers: apiKey ? { Authorization: apiKey } : {},
-            maxContentLength: 10 * 1024 * 1024,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
         });
 
 

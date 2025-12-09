@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // by making a simple API call
             try {
                 // Try to list a single package to verify token is valid
-                await axiosInstance.get(`${getCkanUrl()}/api/3/action/site_read`, {
+                await axiosInstance.get(`${getCkanUrl()}/api/3/action/status_show`, {
                     headers: { Authorization: callerToken }
                 });
             } catch (siteError) {
